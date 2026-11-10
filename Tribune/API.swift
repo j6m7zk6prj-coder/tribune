@@ -16,8 +16,8 @@ enum ESPN {
     }
 
     static func scoreboard(_ league: String, dates: String? = nil) async throws -> ScoreboardResponse {
-        var s = "\(site)/\(league)/scoreboard?limit=300"
-        if let dates { s += "&dates=\(dates)" }
+        var s = "\(site)/\(league)/scoreboard"
+        if let dates { s += "?dates=\(dates)" }
         return try await get(s)
     }
 
@@ -48,14 +48,16 @@ enum ESPN {
         let cal = Calendar.current
         let prev = cal.date(byAdding: .day, value: -1, to: day) ?? day
         // ESPN découpe les journées à l'heure de New York : on prend la veille aussi, puis on filtre.
-        let range = "\(espnDay(prev))-\(espnDay(day))"
+        let days = [espnDay(prev), espnDay(day)]
+        let jobs = competitions.flatMap { c in days.map { (c, $0) } }
         var out: [Match] = []
         var failures = 0
         await withTaskGroup(of: (Competition, ScoreboardResponse?).self) { g in
-            for c in competitions {
-                g.addTask { (c, try? await ESPN.scoreboard(c.id, dates: range)) }
-            }
+            var it = jobs.makeIterator()
+            // 6 requêtes à la fois au maximum.
+            for _ in 0..<6 { if let job = it.next() { g.addTask { (job.0, await DayCache.shared.scoreboard(job.0.id, day: job.1)) } } }
             for await (c, r) in g {
+                if let job = it.next() { g.addTask { (job.0, await DayCache.shared.scoreboard(job.0.id, day: job.1)) } }
                 guard let r else { failures += 1; continue }
                 if let l = r.leagues.first?.logos.first?.href, let u = URL(string: l) { await onLogo(c.id, u) }
                 out += r.events.compactMap { Match($0, league: c.id) }.filter { cal.isDate($0.date, inSameDayAs: day) }
@@ -63,6 +65,32 @@ enum ESPN {
         }
         var seen = Set<String>()
         out = out.filter { seen.insert($0.id).inserted }
-        return (out, failures == competitions.count && !competitions.isEmpty)
+        return (out, failures == jobs.count && !jobs.isEmpty)
+    }
+}
+
+/// Garde les tableaux de scores quelques instants pour ne pas refaire les mêmes requêtes
+/// quand on glisse d'un jour à l'autre.
+actor DayCache {
+    static let shared = DayCache()
+    private var store: [String: (Date, ScoreboardResponse)] = [:]
+    @MainActor static var lastError: String = ""
+
+    func scoreboard(_ league: String, day: String) async -> ScoreboardResponse? {
+        let key = league + "|" + day
+        let isPast = day < espnDay(Calendar.current.date(byAdding: .day, value: -1, to: .now) ?? .now)
+        let ttl: TimeInterval = isPast ? 600 : 25
+        if let hit = store[key], Date().timeIntervalSince(hit.0) < ttl { return hit.1 }
+        for attempt in 0..<2 {
+            do {
+                let r = try await ESPN.scoreboard(league, dates: day)
+                store[key] = (Date(), r)
+                return r
+            } catch {
+                await MainActor.run { DayCache.lastError = "\(league) \(day) : \(error.localizedDescription)" }
+                if attempt == 0 { try? await Task.sleep(for: .milliseconds(400)) }
+            }
+        }
+        return store[key]?.1
     }
 }

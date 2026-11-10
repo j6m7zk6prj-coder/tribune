@@ -11,7 +11,9 @@ struct TribuneApp: App {
 
     var body: some Scene {
         WindowGroup {
-            RootView()
+            Group {
+                if Launch.args.contains("-diag") { DiagView() } else { RootView() }
+            }
                 .environment(store)
                 .preferredColorScheme(store.appearance.scheme)
                 .tint(.brand)

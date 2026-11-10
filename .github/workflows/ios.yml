@@ -86,6 +86,7 @@ jobs:
             sleep 12
             xcrun simctl io "$UDID" screenshot "shots/$1.png"
           }
+          shot 00-diag -diag
           shot 01-matchs-aujourdhui -tab matches
           shot 02-matchs-jour -tab matches -day -2
           shot 03-match-resume -tab matches -day -2 -open match
