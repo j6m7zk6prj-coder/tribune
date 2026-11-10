@@ -31,7 +31,44 @@ targets:
         UILaunchScreen: {}
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
         ITSAppUsesNonExemptEncryption: false
+    dependencies:
+      - target: TribuneWidget
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.tepsko.tribune
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+
+  TribuneWidget:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: TribuneWidget
+      - path: Tribune/ESPNModels.swift
+      - path: Tribune/Model.swift
+      - path: Tribune/API.swift
+      - path: Tribune/Design.swift
+      - path: Tribune/Components.swift
+      - path: Tribune/Store.swift
+      - path: Tribune/WidgetShared.swift
+      - path: Tribune/PlayerView.swift
+      - path: Tribune/LineupView.swift
+      - path: Tribune/MatchesView.swift
+      - path: Tribune/MatchDetailView.swift
+      - path: Tribune/StatsView.swift
+      - path: Tribune/StandingsView.swift
+      - path: Tribune/LeaguesView.swift
+      - path: Tribune/FollowingView.swift
+      - path: Tribune/SettingsView.swift
+      - path: Tribune/DiagView.swift
+    info:
+      path: Support/Widget-Info.plist
+      properties:
+        CFBundleDisplayName: Tribune
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.tepsko.tribune.widget
+        SKIP_INSTALL: YES

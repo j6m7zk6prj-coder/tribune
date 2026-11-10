@@ -397,7 +397,11 @@ struct EventRow: View {
                 }
                 if event.kind == .penaltyGoal { Text("Penalty").font(.footnote).foregroundStyle(.secondary) }
                 else if event.kind == .ownGoal { Text("Contre son camp").font(.footnote).foregroundStyle(.secondary) }
-                else if event.athletes.count > 1 { Text("Passe : \(name(event.athletes[1]))").font(.footnote).foregroundStyle(.secondary) }
+                else if event.athletes.count > 1 {
+                    Label(name(event.athletes[1]), systemImage: "shoe.fill")
+                        .font(.footnote).foregroundStyle(.secondary)
+                        .labelStyle(AssistLabelStyle(trailing: !isHome))
+                }
             case .penaltyMissed:
                 Text(name(event.athletes.first)).font(.subheadline)
                 Text("Penalty manqué").font(.footnote).foregroundStyle(.secondary)
@@ -409,6 +413,14 @@ struct EventRow: View {
     }
 }
 
-extension String {
-    var capitalizedFirst: String { prefix(1).uppercased() + dropFirst() }
+
+/// Icône de crampon devant (ou derrière) le nom du passeur.
+struct AssistLabelStyle: LabelStyle {
+    let trailing: Bool
+    func makeBody(configuration: Configuration) -> some View {
+        HStack(spacing: 5) {
+            if trailing { configuration.title; configuration.icon.font(.system(size: 11)) }
+            else { configuration.icon.font(.system(size: 11)); configuration.title }
+        }
+    }
 }

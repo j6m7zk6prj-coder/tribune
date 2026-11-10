@@ -282,8 +282,12 @@ struct RosterPlayer: Decodable, Identifiable {
     let formationPlace: Int?
     let subbedIn: Bool
     let subbedOut: Bool
+    let positionName: String?
+    let stats: [PlayerStat]
     init(from d: Decoder) throws {
         let c = try d.container(keyedBy: AnyKey.self)
+        stats = c.list(PlayerStat.self, c["stats"])
+        if let p = try? c.nestedContainer(keyedBy: AnyKey.self, forKey: c["position"]) { positionName = p.str(p["displayName"]) ?? p.str(p["name"]) } else { positionName = nil }
         starter = c.bool(c["starter"]) ?? false
         jersey = c.str(c["jersey"])
         athlete = c.obj(ESPNAthlete.self, c["athlete"])
@@ -296,6 +300,19 @@ struct RosterPlayer: Decodable, Identifiable {
     var name: String {
         if let l = athlete?.lastName, !l.isEmpty { return l }
         return athlete?.displayName?.split(separator: " ").last.map(String.init) ?? "—"
+    }
+}
+
+struct PlayerStat: Decodable {
+    let name: String
+    let displayValue: String?
+    let value: Double?
+    let label: String?
+    init(from d: Decoder) throws {
+        let c = try d.container(keyedBy: AnyKey.self)
+        guard let n = c.str(c["name"]) else { throw DecodingError.dataCorrupted(.init(codingPath: [], debugDescription: "name")) }
+        name = n; displayValue = c.str(c["displayValue"]); value = c.dbl(c["value"])
+        label = c.str(c["shortDisplayName"]) ?? c.str(c["displayName"]) ?? c.str(c["abbreviation"])
     }
 }
 

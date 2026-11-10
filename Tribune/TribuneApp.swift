@@ -12,7 +12,9 @@ struct TribuneApp: App {
     var body: some Scene {
         WindowGroup {
             Group {
-                if Launch.args.contains("-diag") { DiagView() } else { RootView() }
+                if Launch.args.contains("-diag") { DiagView() }
+                else if Launch.args.contains("-widgets") { NavigationStack { WidgetPreviewView() } }
+                else { RootView() }
             }
                 .environment(store)
                 .preferredColorScheme(store.appearance.scheme)

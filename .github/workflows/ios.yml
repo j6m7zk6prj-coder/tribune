@@ -91,12 +91,15 @@ jobs:
           shot 02-matchs-jour -tab matches -day -2
           shot 03-match-resume -tab matches -day -2 -open match
           shot 04-match-compos -tab matches -day -2 -open match -detailTab compos
+          shot 04b-joueur -tab matches -day -2 -open match -detailTab compos -player
           shot 05-match-stats -tab matches -day -2 -open match -detailTab stats
           shot 06-match-classement -tab matches -day -2 -open match -detailTab table
           shot 07-ligues -tab leagues
           shot 08-ligue -tab leagues -open league
           shot 09-suivis -tab following -seed
           shot 10-equipe -tab following -seed -open team
+          shot 13-widgets -widgets
+          shot 13b-widgets-clair -widgets -appearance light
           shot 11-reglages -tab matches -settings
           shot 12-matchs-clair -tab matches -day -2 -appearance light
           ls -la shots

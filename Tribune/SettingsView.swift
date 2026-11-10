@@ -34,6 +34,11 @@ struct SettingsView: View {
                     }
                 }
                 Section {
+                    NavigationLink { WidgetPreviewView() } label: {
+                        Label("Widgets de l’écran d’accueil", systemImage: "square.grid.2x2")
+                    }
+                }
+                Section {
                     Text("Données : ESPN. Scores mis à jour toutes les 30 secondes pendant les matchs.")
                         .font(.footnote).foregroundStyle(.secondary)
                 }

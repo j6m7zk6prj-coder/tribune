@@ -7,6 +7,7 @@ struct LineupView: View {
 
     private var home: Roster? { rosters.first { $0.homeAway == "home" } ?? rosters.first }
     private var away: Roster? { rosters.first { $0.homeAway == "away" } ?? (rosters.count > 1 ? rosters[1] : nil) }
+    @State private var picked: PlayerPick?
 
     var body: some View {
         let marks = PlayerMarks(events)
@@ -24,6 +25,40 @@ struct LineupView: View {
 
             Bench(title: "Remplaçants", home: home?.players.filter { !$0.starter } ?? [], away: away?.players.filter { !$0.starter } ?? [], marks: marks)
         }
+        .environment(\.onPlayerTap) { p in
+            let isHome = home?.players.contains { $0.id == p.id } ?? true
+            picked = PlayerPick(player: p, isHome: isHome)
+        }
+        .sheet(item: $picked) { pick in
+            PlayerSheet(player: pick.player, side: pick.isHome ? match.home : match.away,
+                        opponent: pick.isHome ? match.away : match.home,
+                        tint: pick.isHome ? colors.0 : colors.1, match: match, marks: marks)
+        }
+        .onAppear {
+            // Capture d'écran automatique : ouvre la fiche du premier buteur.
+            if Launch.args.contains("-player"), !Launch.consumed.contains("player"), let first = (home?.players ?? []).first(where: { marks.goals[$0.id] != nil }) ?? (away?.players ?? []).first(where: { marks.goals[$0.id] != nil }) ?? home?.players.first {
+                Launch.consumed.insert("player")
+                let isHome = home?.players.contains { $0.id == first.id } ?? true
+                picked = PlayerPick(player: first, isHome: isHome)
+            }
+        }
+    }
+}
+
+struct PlayerPick: Identifiable {
+    let player: RosterPlayer
+    let isHome: Bool
+    var id: String { player.id }
+}
+
+struct PlayerTapKey: EnvironmentKey {
+    static let defaultValue: (RosterPlayer) -> Void = { _ in }
+}
+
+extension EnvironmentValues {
+    var onPlayerTap: (RosterPlayer) -> Void {
+        get { self[PlayerTapKey.self] }
+        set { self[PlayerTapKey.self] = newValue }
     }
 }
 
@@ -49,16 +84,27 @@ struct PlayerMarks {
     var red: Set<String> = []
     var subbedOff: Set<String> = []
     var subbedOn: Set<String> = []
+    var assists: [String: Int] = [:]
+    /// Minutes clés de chaque joueur (but, passe, carton, entrée, sortie).
+    var moments: [String: [(String, String)]] = [:]
     init(_ evs: [KeyEvent]) {
         for e in evs {
             guard let id = e.athletes.first?.id else { continue }
+            let minute = e.clockDisplay ?? ""
             switch e.kind {
-            case .goal, .penaltyGoal: goals[id, default: 0] += 1
-            case .yellow: yellow.insert(id)
-            case .red, .secondYellow: red.insert(id)
+            case .goal, .penaltyGoal:
+                goals[id, default: 0] += 1
+                moments[id, default: []].append((e.kind == .penaltyGoal ? "But (penalty)" : "But", minute))
+                if e.athletes.count > 1, let a = e.athletes[1].id {
+                    assists[a, default: 0] += 1
+                    moments[a, default: []].append(("Passe décisive", minute))
+                }
+            case .ownGoal: moments[id, default: []].append(("But contre son camp", minute))
+            case .yellow: yellow.insert(id); moments[id, default: []].append(("Carton jaune", minute))
+            case .red, .secondYellow: red.insert(id); moments[id, default: []].append(("Carton rouge", minute))
             case .sub:
-                subbedOn.insert(id)
-                if e.athletes.count > 1, let o = e.athletes[1].id { subbedOff.insert(o) }
+                subbedOn.insert(id); moments[id, default: []].append(("Entré en jeu", minute))
+                if e.athletes.count > 1, let o = e.athletes[1].id { subbedOff.insert(o); moments[o, default: []].append(("Remplacé", minute)) }
             default: break
             }
         }
@@ -178,56 +224,77 @@ private struct PlayerDot: View {
     let player: RosterPlayer
     let color: Color
     let marks: PlayerMarks
+    @Environment(\.onPlayerTap) private var onTap
+
     var body: some View {
         let id = player.athlete?.id ?? ""
-        VStack(spacing: 4) {
-            ZStack {
-                Circle()
-                    .fill(LinearGradient(colors: [color, color.opacity(0.7)], startPoint: .top, endPoint: .bottom))
-                    .frame(width: 36, height: 36)
-                    .overlay(Circle().strokeBorder(.white.opacity(0.9), lineWidth: 1.5))
-                    .shadow(color: color.opacity(0.8), radius: 8)
-                Text(player.jersey ?? "")
-                    .font(.system(size: 13, weight: .bold).monospacedDigit())
-                    .foregroundStyle(.white)
-            }
-            .overlay(alignment: .topTrailing) {
-                if marks.red.contains(id) {
-                    RoundedRectangle(cornerRadius: 1.5).fill(.red).frame(width: 8, height: 11).offset(x: 4, y: -2)
-                } else if marks.yellow.contains(id) {
-                    RoundedRectangle(cornerRadius: 1.5).fill(.yellow).frame(width: 8, height: 11).offset(x: 4, y: -2)
-                }
-            }
-            .overlay(alignment: .topLeading) {
-                if let g = marks.goals[id], g > 0 {
-                    HStack(spacing: 0) {
-                        ForEach(0..<min(g, 3), id: \.self) { _ in
-                            Image(systemName: "soccerball").font(.system(size: 10, weight: .bold))
-                        }
-                    }
-                    .foregroundStyle(.white)
-                    .padding(1.5)
-                    .background(Circle().fill(.black.opacity(0.55)))
-                    .offset(x: -6, y: -3)
-                }
-            }
-            .overlay(alignment: .bottomTrailing) {
-                if marks.subbedOff.contains(id) || player.subbedOut {
-                    Image(systemName: "arrow.down")
-                        .font(.system(size: 8, weight: .heavy))
+        Button { onTap(player) } label: {
+            VStack(spacing: 4) {
+                ZStack {
+                    Circle()
+                        .fill(LinearGradient(colors: [color, color.opacity(0.7)], startPoint: .top, endPoint: .bottom))
+                        .frame(width: 36, height: 36)
+                        .overlay(Circle().strokeBorder(.white.opacity(0.9), lineWidth: 1.5))
+                        .shadow(color: color.opacity(0.8), radius: 8)
+                    Text(player.jersey ?? "")
+                        .font(.system(size: 13, weight: .bold).monospacedDigit())
                         .foregroundStyle(.white)
-                        .frame(width: 14, height: 14)
-                        .background(Circle().fill(Color.red))
-                        .offset(x: 4, y: 3)
+                        .shadow(color: .black.opacity(0.35), radius: 1)
                 }
+                .overlay(alignment: .topTrailing) {
+                    if marks.red.contains(id) {
+                        RoundedRectangle(cornerRadius: 1.5).fill(.red).frame(width: 8, height: 11).offset(x: 4, y: -2)
+                    } else if marks.yellow.contains(id) {
+                        RoundedRectangle(cornerRadius: 1.5).fill(.yellow).frame(width: 8, height: 11).offset(x: 4, y: -2)
+                    }
+                }
+                .overlay(alignment: .topLeading) {
+                    if let g = marks.goals[id], g > 0 {
+                        Badge(icon: "soccerball", count: g).offset(x: -8, y: -4)
+                    }
+                }
+                .overlay(alignment: .bottomLeading) {
+                    if let a = marks.assists[id], a > 0 {
+                        Badge(icon: "shoe.fill", count: a).offset(x: -8, y: 4)
+                    }
+                }
+                .overlay(alignment: .bottomTrailing) {
+                    if marks.subbedOff.contains(id) || player.subbedOut {
+                        Image(systemName: "arrow.down")
+                            .font(.system(size: 8, weight: .heavy))
+                            .foregroundStyle(.white)
+                            .frame(width: 14, height: 14)
+                            .background(Circle().fill(Color.red))
+                            .offset(x: 4, y: 3)
+                    }
+                }
+                Text(player.name)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+                    .padding(.horizontal, 2)
             }
-            Text(player.name)
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(.white)
-                .lineLimit(1)
-                .minimumScaleFactor(0.75)
-                .padding(.horizontal, 2)
         }
+        .buttonStyle(Pressable())
+        .accessibilityLabel("\(player.athlete?.displayName ?? player.name), voir ses statistiques")
+    }
+}
+
+/// Pastille d'action sur un joueur (but, passe décisive).
+struct Badge: View {
+    let icon: String
+    let count: Int
+    var body: some View {
+        HStack(spacing: 1) {
+            Image(systemName: icon).font(.system(size: 9, weight: .bold))
+            if count > 1 { Text("\(count)").font(.system(size: 9, weight: .heavy)) }
+        }
+        .foregroundStyle(.white)
+        .padding(.horizontal, count > 1 ? 4 : 3)
+        .padding(.vertical, 3)
+        .background(Capsule().fill(.black.opacity(0.62)))
+        .overlay(Capsule().strokeBorder(.white.opacity(0.35), lineWidth: 0.5))
     }
 }
 
@@ -256,6 +323,7 @@ private struct PitchLines: View {
 // MARK: - Remplaçants
 
 private struct Bench: View {
+    @Environment(\.onPlayerTap) private var onTap
     let title: String
     let home: [RosterPlayer]
     let away: [RosterPlayer]
@@ -279,15 +347,22 @@ private struct Bench: View {
     func column(_ ps: [RosterPlayer]) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             ForEach(ps) { p in
-                let came = marks.subbedOn.contains(p.athlete?.id ?? "") || p.subbedIn
-                HStack(spacing: 8) {
-                    Text(p.jersey ?? "").font(.footnote.monospacedDigit()).foregroundStyle(.secondary).frame(width: 22, alignment: .trailing)
-                    Text(p.athlete?.shortName ?? p.name).font(.footnote).lineLimit(1)
-                    Spacer(minLength: 0)
-                    if came { Image(systemName: "arrow.up").font(.system(size: 10, weight: .bold)).foregroundStyle(Color.brand) }
+                let pid = p.athlete?.id ?? ""
+                let came = marks.subbedOn.contains(pid) || p.subbedIn
+                Button { onTap(p) } label: {
+                    HStack(spacing: 6) {
+                        Text(p.jersey ?? "").font(.footnote.monospacedDigit()).foregroundStyle(.secondary).frame(width: 22, alignment: .trailing)
+                        Text(p.athlete?.shortName ?? p.name).font(.footnote).foregroundStyle(.primary).lineLimit(1)
+                        Spacer(minLength: 0)
+                        if marks.goals[pid] != nil { Image(systemName: "soccerball").font(.system(size: 10, weight: .bold)) }
+                        if marks.assists[pid] != nil { Image(systemName: "shoe.fill").font(.system(size: 10, weight: .bold)) }
+                        if came { Image(systemName: "arrow.up").font(.system(size: 10, weight: .bold)).foregroundStyle(Color.brand) }
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 8)
+                    .contentShape(Rectangle())
                 }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 8)
+                .buttonStyle(Pressable())
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)

@@ -262,3 +262,7 @@ func hexRGB(_ hex: String?) -> (Double, Double, Double)? {
     guard h.count == 6, let v = UInt32(h, radix: 16) else { return nil }
     return (Double((v >> 16) & 0xFF) / 255, Double((v >> 8) & 0xFF) / 255, Double(v & 0xFF) / 255)
 }
+
+extension String {
+    var capitalizedFirst: String { prefix(1).uppercased() + dropFirst() }
+}
