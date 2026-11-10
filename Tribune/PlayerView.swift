@@ -85,7 +85,7 @@ enum PlayerAPI {
         return groups
     }
 
-    static let fr: [String: String] = [
+    static let frLabels: [String: String] = [
         "appearances": "Matchs", "starts": "Titularisations", "goals": "Buts", "assists": "Passes décisives",
         "shots": "Tirs", "shots on target": "Tirs cadrés", "fouls committed": "Fautes commises",
         "fouls suffered": "Fautes subies", "yellow cards": "Cartons jaunes", "red cards": "Cartons rouges",
@@ -97,7 +97,7 @@ enum PlayerAPI {
         "total passes": "Passes", "passing accuracy": "Précision des passes", "tackles": "Tacles", "interceptions": "Interceptions",
         "clearances": "Dégagements", "blocked shots": "Tirs contrés", "crosses": "Centres", "dribbles": "Dribbles",
     ]
-    static func translate(_ s: String) -> String { fr[s.lowercased()] ?? s }
+    static func translate(_ s: String) -> String { frLabels[s.lowercased()] ?? s }
 }
 
 // MARK: - Fiche joueur
