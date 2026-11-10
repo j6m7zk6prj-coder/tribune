@@ -113,7 +113,9 @@ enum PlayerAPI {
                 groups.append(StatGroup(title: title, items: items))
             }
         }
-        guard let root = await json("\(base)/\(league)/athletes/\(id)/overview") ?? json("\(base)/\(league)/athletes/\(id)/stats") else { return groups }
+        var fetched = await json("\(base)/\(league)/athletes/\(id)/overview")
+        if fetched == nil { fetched = await json("\(base)/\(league)/athletes/\(id)/stats") }
+        guard let root = fetched else { return groups }
         func walk(_ x: Any) {
             if let d = x as? [String: Any] {
                 let labels = (d["displayNames"] as? [String]) ?? (d["labels"] as? [String])
