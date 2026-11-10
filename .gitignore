@@ -1,0 +1,6 @@
+build/
+simbuild/
+*.xcodeproj/
+Tribune/Assets.xcassets/
+Support/
+.DS_Store
