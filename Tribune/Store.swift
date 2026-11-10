@@ -19,6 +19,7 @@ final class AppStore {
     var leagueLogos: [String: String] { didSet { d.set(leagueLogos, forKey: "leagueLogos") } }
 
     init() {
+        let d = UserDefaults.standard
         favorites = (d.data(forKey: "favorites")).flatMap { try? JSONDecoder().decode([TeamRef].self, from: $0) } ?? []
         enabled = Set(d.stringArray(forKey: "enabled") ?? Competition.all.filter(\.defaultOn).map(\.id))
         appearance = Appearance(rawValue: d.string(forKey: "appearance") ?? "") ?? .dark

@@ -36,8 +36,8 @@ enum ESPN {
 
     /// Matchs passés et à venir d'une équipe.
     static func schedule(_ league: String, team: String) async -> [ESPNEvent] {
-        async let past: ScheduleResponse? = try? get("\(site)/\(league)/teams/\(team)/schedule")
-        async let next: ScheduleResponse? = try? get("\(site)/\(league)/teams/\(team)/schedule?fixture=true")
+        async let past: ScheduleResponse? = try? ESPN.get("\(site)/\(league)/teams/\(team)/schedule")
+        async let next: ScheduleResponse? = try? ESPN.get("\(site)/\(league)/teams/\(team)/schedule?fixture=true")
         let all = ((await past)?.events ?? []) + ((await next)?.events ?? [])
         var seen = Set<String>()
         return all.filter { seen.insert($0.id).inserted }
@@ -53,7 +53,7 @@ enum ESPN {
         var failures = 0
         await withTaskGroup(of: (Competition, ScoreboardResponse?).self) { g in
             for c in competitions {
-                g.addTask { (c, try? await scoreboard(c.id, dates: range)) }
+                g.addTask { (c, try? await ESPN.scoreboard(c.id, dates: range)) }
             }
             for await (c, r) in g {
                 guard let r else { failures += 1; continue }

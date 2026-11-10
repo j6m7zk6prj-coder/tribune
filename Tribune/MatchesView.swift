@@ -88,7 +88,7 @@ struct DayStrip: View {
                             VStack(spacing: 7) {
                                 Text(label(off))
                                     .font(.subheadline.weight(selection == off ? .semibold : .regular))
-                                    .foregroundStyle(selection == off ? .primary : .secondary)
+                                    .foregroundStyle(selection == off ? Color.primary : Color.secondary)
                                 ZStack {
                                     Capsule().fill(.clear).frame(height: 3)
                                     if selection == off {

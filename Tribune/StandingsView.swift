@@ -87,7 +87,7 @@ struct StandingsTable: View {
                 Text("Pts").frame(width: 36)
             }
             .font(.caption.weight(showName ? .semibold : .regular))
-            .foregroundStyle(showName ? .primary : .secondary)
+            .foregroundStyle(showName ? Color.primary : Color.secondary)
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
 

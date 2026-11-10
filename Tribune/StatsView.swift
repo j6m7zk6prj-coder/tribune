@@ -138,7 +138,7 @@ struct StatRow: View {
     func pill(_ s: String, lead: Bool, color: Color) -> some View {
         Text(s)
             .font(.subheadline.weight(lead ? .semibold : .regular).monospacedDigit())
-            .foregroundStyle(lead ? .white : .primary)
+            .foregroundStyle(lead ? Color.white : Color.primary)
             .padding(.horizontal, 9)
             .frame(minWidth: 40, minHeight: 26)
             .background(Capsule().fill(lead ? color : .clear))
