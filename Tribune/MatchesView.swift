@@ -112,10 +112,11 @@ struct DayStrip: View {
                     }
                 }
                 .padding(5)
-                .glassSurface(cornerRadius: 30)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
             }
+            .clipShape(RoundedRectangle(cornerRadius: 30, style: .continuous))
+            .glassSurface(cornerRadius: 30)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
             .sensoryFeedback(.selection, trigger: selection)
             .onAppear { proxy.scrollTo(selection, anchor: .center) }
             .onChange(of: selection) { _, v in withAnimation(.smooth(duration: 0.4)) { proxy.scrollTo(v, anchor: .center) } }

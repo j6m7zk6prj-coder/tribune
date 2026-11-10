@@ -53,7 +53,7 @@ struct MatchDetailView: View {
                     case .facts: FactsView(match: match, events: events, summary: summary, loading: loading, colors: colors)
                     case .lineups: LineupView(match: match, rosters: summary?.rosters ?? [], events: events)
                     case .stats: StatsView(match: match, teams: summary?.boxTeams ?? [])
-                    case .table: StandingsTable(league: match.league, highlight: [match.home.id, match.away.id], compact: false)
+                    case .table: StandingsTable(league: match.league, highlight: [match.home.id, match.away.id], highlightColors: [match.home.id: colors.0, match.away.id: colors.1], compact: false)
                     }
                 }
                 .transition(.opacity.combined(with: .offset(y: 12)))

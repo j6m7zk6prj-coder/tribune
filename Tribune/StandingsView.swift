@@ -46,6 +46,7 @@ func loadStandings(_ league: String) async -> [StandingGroup]? {
 struct StandingsTable: View {
     let league: String
     var highlight: Set<String> = []
+    var highlightColors: [String: Color] = [:]
     var compact = false
     var preloaded: [StandingGroup]? = nil
 
@@ -123,7 +124,7 @@ struct StandingsTable: View {
         .background {
             if hi {
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(LinearGradient(colors: [r.team.tint.opacity(0.55), r.team.tint.opacity(0.08)], startPoint: .leading, endPoint: .trailing))
+                    .fill(LinearGradient(colors: [(highlightColors[r.id] ?? Color.brand).opacity(0.55), (highlightColors[r.id] ?? Color.brand).opacity(0.08)], startPoint: .leading, endPoint: .trailing))
                     .padding(.horizontal, 4)
             }
         }
