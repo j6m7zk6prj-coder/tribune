@@ -31,7 +31,7 @@ func loadStandings(_ league: String) async -> [StandingGroup]? {
             return StandingRow(
                 id: id,
                 rank: Int(e.stat("rank") ?? Double(i + 1)),
-                team: TeamRef(id: id, name: t.shortDisplayName ?? t.displayName ?? "—", league: league, logo: t.logoURL?.absoluteString),
+                team: TeamRef(id: id, name: t.shortDisplayName ?? t.displayName ?? "—", league: league, logo: t.logoURL?.absoluteString, color: usableHex(t.color, t.alternateColor)),
                 played: Int(e.stat("gamesPlayed") ?? 0),
                 diff: Int(e.stat("pointDifferential") ?? 0),
                 points: Int(e.stat("points") ?? 0),
@@ -95,11 +95,11 @@ struct StandingsTable: View {
                 NavigationLink(value: Route.team(r.team)) {
                     row(r)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(Pressable())
             }
         }
-        .padding(.bottom, 4)
-        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .padding(.bottom, 6)
+        .glassSurface(cornerRadius: 26)
     }
 
     private func row(_ r: StandingRow) -> some View {
@@ -120,7 +120,13 @@ struct StandingsTable: View {
         .font(.subheadline.monospacedDigit())
         .padding(.horizontal, 12)
         .padding(.vertical, 9)
-        .background(hi ? Color.brand.opacity(0.14) : .clear)
+        .background {
+            if hi {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(LinearGradient(colors: [r.team.tint.opacity(0.55), r.team.tint.opacity(0.08)], startPoint: .leading, endPoint: .trailing))
+                    .padding(.horizontal, 4)
+            }
+        }
         .contentShape(Rectangle())
     }
 

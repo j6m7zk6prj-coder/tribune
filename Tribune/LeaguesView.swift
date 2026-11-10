@@ -7,28 +7,27 @@ struct LeaguesView: View {
 
     var body: some View {
         NavigationStack(path: $path) {
-            List {
-                ForEach(CompGroup.allCases) { g in
-                    let comps = Competition.all.filter { $0.group == g && matches($0) }
-                    if !comps.isEmpty {
-                        Section(g.rawValue) {
-                            ForEach(comps) { c in
-                                NavigationLink(value: Route.league(c)) {
-                                    HStack(spacing: 12) {
-                                        LeagueLogo(league: c.id, size: 26)
-                                        VStack(alignment: .leading, spacing: 1) {
-                                            Text(c.name).font(.body)
-                                            Text(c.area).font(.footnote).foregroundStyle(.secondary)
-                                        }
-                                    }
-                                    .padding(.vertical, 2)
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 12) {
+                    ForEach(CompGroup.allCases) { g in
+                        let comps = Competition.all.filter { $0.group == g && matches($0) }
+                        if !comps.isEmpty {
+                            SectionTitle(text: g.rawValue)
+                            LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
+                                ForEach(comps) { c in
+                                    NavigationLink(value: Route.league(c)) { LeagueTile(competition: c) }
+                                        .buttonStyle(Pressable())
+                                        .floatIn()
                                 }
                             }
                         }
                     }
                 }
+                .padding(.horizontal, 16)
+                .padding(.bottom, 40)
             }
-            .listStyle(.insetGrouped)
+            .scrollIndicators(.hidden)
+            .background { AmbientBackground(colors: [Color(red: 0.42, green: 0.17, blue: 0.57), Color(red: 0.12, green: 0.25, blue: 0.66), .brand], intensity: 0.8) }
             .navigationTitle("Ligues")
             .searchable(text: $query, prompt: "Rechercher une compétition")
             .tribuneDestinations()
@@ -57,6 +56,26 @@ struct LeaguesView: View {
     }
 }
 
+struct LeagueTile: View {
+    let competition: Competition
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ZStack {
+                Circle().fill(.white.opacity(0.9)).frame(width: 46, height: 46)
+                    .shadow(color: competition.tint.opacity(0.6), radius: 10)
+                LeagueLogo(league: competition.id, size: 30)
+                    .environment(\.colorScheme, .light)
+            }
+            Spacer(minLength: 14)
+            Text(competition.name).font(.headline).foregroundStyle(.primary).lineLimit(2).multilineTextAlignment(.leading)
+            Text(competition.area).font(.caption).foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, minHeight: 128, alignment: .leading)
+        .padding(14)
+        .glassSurface(cornerRadius: 26, wash: [competition.tint, competition.tint.opacity(0.4)], washOpacity: 0.45)
+    }
+}
+
 // MARK: - Page d'une compétition
 
 struct CompetitionView: View {
@@ -73,35 +92,35 @@ struct CompetitionView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 16) {
-                HStack(spacing: 14) {
-                    LeagueLogo(league: competition.id, size: 52)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(competition.name).font(.title2.weight(.bold))
-                        Text(competition.area).font(.subheadline).foregroundStyle(.secondary)
+                VStack(spacing: 12) {
+                    ZStack {
+                        Circle().fill(.white.opacity(0.92)).frame(width: 88, height: 88)
+                            .shadow(color: competition.tint.opacity(0.8), radius: 26)
+                        LeagueLogo(league: competition.id, size: 58).environment(\.colorScheme, .light)
                     }
-                    Spacer()
+                    Text(competition.name).font(.title.weight(.bold))
+                    Text(competition.area).font(.subheadline).foregroundStyle(.secondary)
                 }
-                .padding(.top, 4)
+                .frame(maxWidth: .infinity)
+                .padding(.top, 6)
 
                 if !(standings ?? []).isEmpty {
-                    Picker("Section", selection: $section) {
-                        ForEach(Pane.allCases) { Text($0.rawValue).tag($0) }
-                    }
-                    .pickerStyle(.segmented)
+                    GlassTabs(tabs: Pane.allCases, selection: $section, tint: competition.tint) { $0.rawValue }
                 }
 
                 if loading {
                     ProgressView().padding(.vertical, 60)
                 } else if section == .table, let s = standings, !s.isEmpty {
-                    StandingsTable(league: competition.id, preloaded: s)
+                    StandingsTable(league: competition.id, preloaded: s).transition(.opacity)
                 } else {
-                    matchList
+                    VStack(spacing: 16) { matchList }.transition(.opacity)
                 }
             }
             .padding(.horizontal, 16)
             .padding(.bottom, 32)
         }
-        .background(Color(.systemGroupedBackground))
+        .scrollIndicators(.hidden)
+        .background { AmbientBackground(colors: [competition.tint, competition.tint.opacity(0.7), .brand], intensity: 1.1) }
         .navigationTitle(competition.name)
         .navigationBarTitleDisplayMode(.inline)
         .task { await load() }
@@ -141,26 +160,20 @@ struct DatedMatchList: View {
     let matches: [Match]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(title).font(.title3.weight(.bold)).padding(.horizontal, 4).padding(.top, 4)
+        VStack(alignment: .leading, spacing: 10) {
+            SectionTitle(text: title)
             let days = groupByDay(matches)
             ForEach(days) { pair in
-                VStack(alignment: .leading, spacing: 0) {
-                    Text(pair.day.formatted(.dateTime.weekday(.wide).day().month(.wide).locale(fr)).capitalizedFirst)
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal, 14)
-                        .padding(.top, 12)
-                        .padding(.bottom, 4)
-                    ForEach(pair.matches) { m in
-                        NavigationLink(value: Route.match(m)) {
-                            MatchRow(match: m).padding(.horizontal, 14).padding(.vertical, 2)
-                        }
-                        .buttonStyle(.plain)
-                    }
+                Text(pair.day.formatted(.dateTime.weekday(.wide).day().month(.wide).locale(fr)).capitalizedFirst)
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 6)
+                    .padding(.top, 4)
+                ForEach(pair.matches) { m in
+                    NavigationLink(value: Route.match(m)) { MatchCard(match: m) }
+                        .buttonStyle(Pressable())
+                        .floatIn()
                 }
-                .padding(.bottom, 6)
-                .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             }
         }
     }

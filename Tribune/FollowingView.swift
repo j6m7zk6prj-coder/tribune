@@ -9,36 +9,40 @@ struct FollowingView: View {
 
     var body: some View {
         NavigationStack(path: $path) {
-            List {
-                if !store.favorites.isEmpty {
-                    Section("Équipes") {
-                        ForEach(store.favorites) { t in
-                            NavigationLink(value: Route.team(t)) {
-                                HStack(spacing: 12) {
-                                    Logo(url: t.logoURL, size: 30)
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(t.name).font(.body)
-                                        if let m = nextMatches[t.id] {
-                                            Text(nextLine(m, team: t)).font(.footnote).foregroundStyle(m.state == .live ? Color.brand : .secondary)
-                                        } else {
-                                            Text(Competition.named(t.league)?.name ?? "").font(.footnote).foregroundStyle(.secondary)
-                                        }
-                                    }
-                                }
-                                .padding(.vertical, 2)
-                            }
+            ScrollView {
+                LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
+                    ForEach(store.favorites) { t in
+                        NavigationLink(value: Route.team(t)) {
+                            TeamTile(team: t, next: nextMatches[t.id], line: nextMatches[t.id].map { nextLine($0, team: t) })
                         }
-                        .onDelete { store.favorites.remove(atOffsets: $0) }
-                        .onMove { store.favorites.move(fromOffsets: $0, toOffset: $1) }
+                        .buttonStyle(Pressable())
+                        .contextMenu {
+                            Button(role: .destructive) {
+                                withAnimation(.smooth) { store.toggle(t) }
+                            } label: { Label("Ne plus suivre", systemImage: "star.slash") }
+                        }
+                        .floatIn()
+                    }
+                    if !store.favorites.isEmpty {
+                        Button { showPicker = true } label: {
+                            VStack(spacing: 10) {
+                                Image(systemName: "plus").font(.title2.weight(.semibold))
+                                Text("Ajouter").font(.subheadline.weight(.semibold))
+                            }
+                            .foregroundStyle(Color.brand)
+                            .frame(maxWidth: .infinity, minHeight: 168)
+                            .glassSurface(cornerRadius: 28, tint: .brand)
+                        }
+                        .buttonStyle(Pressable())
                     }
                 }
-                Section {
-                    Button { showPicker = true } label: {
-                        Label("Ajouter des équipes", systemImage: "plus")
-                    }
-                }
+                .padding(.horizontal, 16)
+                .padding(.top, 8)
+                .padding(.bottom, 40)
+                .animation(.smooth(duration: 0.4), value: store.favorites)
             }
-            .listStyle(.insetGrouped)
+            .scrollIndicators(.hidden)
+            .background { AmbientBackground(colors: store.favorites.isEmpty ? [.brand] : store.favorites.prefix(3).map(\.tint), intensity: 0.9) }
             .overlay {
                 if store.favorites.isEmpty {
                     ContentUnavailableView {
@@ -53,7 +57,6 @@ struct FollowingView: View {
             }
             .navigationTitle("Suivis")
             .toolbar {
-                if !store.favorites.isEmpty { ToolbarItem(placement: .topBarLeading) { EditButton() } }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button { showSettings = true } label: { Image(systemName: "slider.horizontal.3") }
                         .accessibilityLabel("Réglages")
@@ -72,10 +75,10 @@ struct FollowingView: View {
     func nextLine(_ m: Match, team: TeamRef) -> String {
         let opp = m.home.id == team.id ? m.away.short : m.home.short
         switch m.state {
-        case .live: return "En direct · \(m.home.score ?? "0") - \(m.away.score ?? "0") contre \(opp)"
+        case .live: return "\(m.home.score ?? "0") – \(m.away.score ?? "0") contre \(opp)"
         default:
             let d = m.date.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated).locale(fr))
-            return "\(d) · \(m.kickoff) contre \(opp)"
+            return "\(opp)\n\(d.capitalizedFirst) · \(m.kickoff)"
         }
     }
 
@@ -91,6 +94,33 @@ struct FollowingView: View {
             }
             for await (id, m) in g { nextMatches[id] = m }
         }
+    }
+}
+
+struct TeamTile: View {
+    let team: TeamRef
+    let next: Match?
+    let line: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(alignment: .top) {
+                FloatingLogo(url: team.logoURL, tint: team.tint, size: 50, delay: Double(team.id.count % 3) * 0.6)
+                Spacer()
+                if next?.state == .live { LiveDot(size: 8).padding(6) }
+            }
+            Spacer(minLength: 12)
+            Text(team.name).font(.headline).foregroundStyle(.primary).lineLimit(2).multilineTextAlignment(.leading)
+            if let line {
+                Text(line).font(.caption).foregroundStyle(next?.state == .live ? Color.brand : Color.secondary)
+                    .lineLimit(2).multilineTextAlignment(.leading).padding(.top, 3)
+            } else {
+                Text(Competition.named(team.league)?.name ?? " ").font(.caption).foregroundStyle(.secondary).padding(.top, 3)
+            }
+        }
+        .frame(maxWidth: .infinity, minHeight: 168, alignment: .leading)
+        .padding(14)
+        .glassSurface(cornerRadius: 28, wash: [team.tint, team.tint.opacity(0.35)], washOpacity: 0.5)
     }
 }
 
@@ -137,7 +167,7 @@ struct LeagueTeamsList: View {
     var body: some View {
         let shown = teams.filter { query.isEmpty || ($0.displayName ?? "").localizedCaseInsensitiveContains(query) }
         List(shown, id: \.id) { t in
-            let ref = TeamRef(id: t.id ?? "", name: t.displayName ?? "—", league: competition.id, logo: t.logoURL?.absoluteString)
+            let ref = TeamRef(id: t.id ?? "", name: t.displayName ?? "—", league: competition.id, logo: t.logoURL?.absoluteString, color: usableHex(t.color, t.alternateColor))
             Button { store.toggle(ref) } label: {
                 HStack(spacing: 12) {
                     Logo(url: t.logoURL, size: 28)
@@ -171,14 +201,39 @@ struct TeamView: View {
     @State private var matches: [Match] = []
     @State private var loading = true
 
+    /// Couleur de l'équipe : celle enregistrée, sinon celle trouvée dans ses matchs.
+    private var tint: Color {
+        if team.color != nil { return team.tint }
+        for m in matches {
+            for s in [m.home, m.away] where s.id == team.id && usableHex(s.color, s.altColor) != nil { return s.tint }
+        }
+        return team.tint
+    }
+
     var body: some View {
         let upcoming = matches.filter { $0.state != .post }.sorted { $0.date < $1.date }
         let results = matches.filter { $0.state == .post }.sorted { $0.date > $1.date }
+        let following = store.isFavorite(team.id)
         ScrollView {
             VStack(spacing: 16) {
-                VStack(spacing: 10) {
-                    Logo(url: team.logoURL, size: 76)
-                    Text(team.name).font(.title2.weight(.bold)).multilineTextAlignment(.center)
+                VStack(spacing: 14) {
+                    FloatingLogo(url: team.logoURL, tint: tint, size: 100)
+                        .padding(.top, 10)
+                    Text(team.name).font(.largeTitle.weight(.bold)).multilineTextAlignment(.center)
+                    Button {
+                        withAnimation(.smooth) { store.toggle(team) }
+                    } label: {
+                        Label(following ? "Suivie" : "Suivre", systemImage: following ? "checkmark" : "plus")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(following ? Color.primary : Color.white)
+                            .padding(.horizontal, 20)
+                            .padding(.vertical, 10)
+                            .background { if !following { Capsule().fill(tint.gradient) } }
+                            .glassSurface(cornerRadius: 22, tint: following ? nil : tint, interactive: true)
+                            .contentTransition(.symbolEffect(.replace))
+                    }
+                    .buttonStyle(Pressable())
+                    .sensoryFeedback(.selection, trigger: following)
                     if let c = Competition.named(team.league) {
                         NavigationLink(value: Route.league(c)) {
                             HStack(spacing: 6) {
@@ -206,25 +261,18 @@ struct TeamView: View {
                 }
             }
             .padding(.horizontal, 16)
-            .padding(.bottom, 32)
+            .padding(.bottom, 40)
         }
-        .background(Color(.systemGroupedBackground))
+        .scrollIndicators(.hidden)
+        .background { AmbientBackground(colors: [tint, tint.opacity(0.8), tint], intensity: 1.15) }
         .navigationTitle(team.name)
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button { store.toggle(team) } label: {
-                    Image(systemName: store.isFavorite(team.id) ? "star.fill" : "star")
-                        .contentTransition(.symbolEffect(.replace))
-                }
-                .sensoryFeedback(.selection, trigger: store.isFavorite(team.id))
-                .accessibilityLabel(store.isFavorite(team.id) ? "Ne plus suivre" : "Suivre")
-            }
-        }
         .task {
             let evs = await ESPN.schedule(team.league, team: team.id)
-            matches = evs.compactMap { Match($0, league: team.league) }
-            loading = false
+            withAnimation(.smooth(duration: 0.4)) {
+                matches = evs.compactMap { Match($0, league: team.league) }
+                loading = false
+            }
         }
     }
 }
@@ -242,12 +290,13 @@ struct FormStrip: View {
                 Text(r.0)
                     .font(.footnote.weight(.bold))
                     .foregroundStyle(.white)
-                    .frame(width: 26, height: 26)
-                    .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(r.1))
+                    .frame(width: 30, height: 30)
+                    .background(Circle().fill(r.1.gradient))
+                    .shadow(color: r.1.opacity(0.5), radius: 6)
             }
         }
-        .padding(14)
-        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .padding(16)
+        .glassSurface(cornerRadius: 24)
     }
 
     func outcome(_ m: Match) -> (String, Color) {

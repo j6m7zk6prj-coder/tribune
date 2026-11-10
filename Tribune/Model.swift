@@ -58,6 +58,44 @@ struct Competition: Identifiable, Hashable {
     ]
 
     static func named(_ slug: String) -> Competition? { all.first { $0.id == slug } }
+
+    /// Couleur de chaque compétition (identité visuelle approximative).
+    var tint: Color {
+        let hex: String
+        switch id {
+        case "fra.1": hex = "1B3A8C"
+        case "eng.1": hex = "6A2C91"
+        case "esp.1": hex = "E8432F"
+        case "ita.1": hex = "1C7FD6"
+        case "ger.1": hex = "D3171E"
+        case "uefa.champions": hex = "1E3FA8"
+        case "uefa.europa": hex = "F07F12"
+        case "uefa.europa.conf": hex = "17B26A"
+        case "fifa.world": hex = "A3203F"
+        case "uefa.euro": hex = "2B5BD6"
+        case "uefa.nations": hex = "2E4DB8"
+        case "fifa.worldq.uefa": hex = "6C3FC7"
+        case "uefa.euroq": hex = "3A6FE0"
+        case "fifa.friendly": hex = "4C9A8A"
+        case "caf.nations": hex = "D99A1E"
+        case "conmebol.america": hex = "C73B3B"
+        case "fra.coupe_de_france": hex = "2856C9"
+        case "eng.fa": hex = "C8102E"
+        case "eng.league_cup": hex = "1FA36B"
+        case "esp.copa_del_rey": hex = "B8232F"
+        case "ita.coppa_italia": hex = "1F8A4C"
+        case "ger.dfb_pokal": hex = "2F7D32"
+        case "fra.2": hex = "E4572E"
+        case "por.1": hex = "0F5E3C"
+        case "ned.1": hex = "E35D1A"
+        case "bel.1": hex = "C4302B"
+        case "tur.1": hex = "D7262E"
+        case "ksa.1": hex = "1B8A5A"
+        case "usa.1": hex = "3557A6"
+        default: return fallbackHue(id)
+        }
+        return Color(hex: hex) ?? .brand
+    }
     var order: Int { Competition.all.firstIndex(of: self) ?? 999 }
 }
 
@@ -74,8 +112,8 @@ struct Side: Hashable {
     let score: String?
     let shootout: String?
     let winner: Bool
-    let color: String?
-    let altColor: String?
+    var color: String?
+    var altColor: String?
 
     init(_ c: ESPNCompetitor?) {
         let t = c?.team
@@ -99,8 +137,8 @@ struct Match: Identifiable, Hashable {
     let state: MatchState
     let statusName: String
     let clock: String
-    let home: Side
-    let away: Side
+    var home: Side
+    var away: Side
     let venue: String?
 
     init?(_ e: ESPNEvent, league: String, leagueName: String? = nil) {
@@ -191,10 +229,15 @@ struct TeamRef: Codable, Hashable, Identifiable {
     let name: String
     let league: String
     let logo: String?
+    var color: String? = nil
     var logoURL: URL? { logo.flatMap(URL.init(string:)) ?? URL(string: "https://a.espncdn.com/i/teamlogos/soccer/500/\(id).png") }
 
-    init(id: String, name: String, league: String, logo: String?) { self.id = id; self.name = name; self.league = league; self.logo = logo }
-    init(_ s: Side, league: String) { self.init(id: s.id, name: s.name, league: league, logo: s.logo?.absoluteString) }
+    init(id: String, name: String, league: String, logo: String?, color: String? = nil) {
+        self.id = id; self.name = name; self.league = league; self.logo = logo; self.color = color
+    }
+    init(_ s: Side, league: String) {
+        self.init(id: s.id, name: s.name, league: league, logo: s.logo?.absoluteString, color: usableHex(s.color, s.altColor))
+    }
 }
 
 // MARK: - Couleurs
@@ -218,31 +261,4 @@ func hexRGB(_ hex: String?) -> (Double, Double, Double)? {
     if h.hasPrefix("#") { h.removeFirst() }
     guard h.count == 6, let v = UInt32(h, radix: 16) else { return nil }
     return (Double((v >> 16) & 0xFF) / 255, Double((v >> 8) & 0xFF) / 255, Double(v & 0xFF) / 255)
-}
-
-/// Couleurs des deux équipes pour les statistiques, en évitant deux teintes trop proches
-/// et les couleurs illisibles (blanc ou noir pur).
-func teamColors(_ m: Match) -> (Color, Color) {
-    func usable(_ h: String?) -> (Double, Double, Double)? {
-        guard let c = hexRGB(h) else { return nil }
-        let lum = 0.299 * c.0 + 0.587 * c.1 + 0.114 * c.2
-        return (lum > 0.88 || lum < 0.08) ? nil : c
-    }
-    let h = usable(m.home.color) ?? usable(m.home.altColor)
-    var a = usable(m.away.color)
-    func hue(_ c: (Double, Double, Double)) -> Double {
-        var hh: CGFloat = 0, s: CGFloat = 0, b: CGFloat = 0, al: CGFloat = 0
-        UIColor(red: c.0, green: c.1, blue: c.2, alpha: 1).getHue(&hh, saturation: &s, brightness: &b, alpha: &al)
-        return Double(hh)
-    }
-    func tooClose(_ x: (Double, Double, Double), _ y: (Double, Double, Double)) -> Bool {
-        let dh = abs(hue(x) - hue(y)), dist = abs(x.0 - y.0) + abs(x.1 - y.1) + abs(x.2 - y.2)
-        return min(dh, 1 - dh) < 0.09 || dist < 0.45
-    }
-    if let hh = h, let aa = a, tooClose(hh, aa) {
-        if let alt = usable(m.away.altColor), !tooClose(hh, alt) { a = alt } else { a = (0.55, 0.57, 0.62) }
-    }
-    let home = h.map { Color(red: $0.0, green: $0.1, blue: $0.2) } ?? .brand
-    let away = a.map { Color(red: $0.0, green: $0.1, blue: $0.2) } ?? Color(.systemBlue)
-    return (home, away)
 }

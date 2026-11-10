@@ -24,35 +24,38 @@ struct MatchesView: View {
     @State private var offset: Int = Int(Launch.value("-day") ?? "0") ?? 0
     @State private var liveOnly = false
     @State private var showSettings = Launch.args.contains("-settings")
+    @State private var palette: [Color] = [.brand, Color(red: 0.1, green: 0.45, blue: 0.75), Color(red: 0.35, green: 0.2, blue: 0.7)]
     private let range = -7...7
 
     var body: some View {
         NavigationStack(path: $path) {
             VStack(spacing: 0) {
                 DayStrip(selection: $offset, range: range)
-                Divider()
                 TabView(selection: $offset) {
                     ForEach(range, id: \.self) { off in
-                        DayPage(day: Self.day(off), isToday: off == 0, isActive: abs(off - offset) <= 1, isSelected: off == offset, liveOnly: liveOnly) { m in
-                            path.append(Route.match(m))
-                        }
+                        DayPage(day: Self.day(off), isToday: off == 0, isActive: abs(off - offset) <= 1, isSelected: off == offset, liveOnly: liveOnly,
+                                open: { m in path.append(Route.match(m)) },
+                                onPalette: { cs in if off == offset { palette = cs } })
                         .tag(off)
                     }
                 }
                 .tabViewStyle(.page(indexDisplayMode: .never))
             }
-            .background(Color(.systemGroupedBackground))
-            .navigationTitle("Matchs")
+            .background { AmbientBackground(colors: palette, intensity: 0.9) }
+            .navigationTitle("Tribune")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button { liveOnly.toggle() } label: {
-                        HStack(spacing: 5) {
-                            Circle().fill(liveOnly ? Color.brand : Color.secondary).frame(width: 7, height: 7)
+                    Button {
+                        withAnimation(.smooth) { liveOnly.toggle() }
+                    } label: {
+                        HStack(spacing: 6) {
+                            if liveOnly { LiveDot() } else { Circle().fill(Color.secondary).frame(width: 7, height: 7) }
                             Text("Live").font(.subheadline.weight(.semibold))
                         }
                         .foregroundStyle(liveOnly ? Color.brand : .primary)
                     }
+                    .sensoryFeedback(.selection, trigger: liveOnly)
                     .accessibilityLabel(liveOnly ? "Afficher tous les matchs" : "Afficher seulement les matchs en direct")
                 }
                 ToolbarItem(placement: .topBarTrailing) {
@@ -80,46 +83,56 @@ struct DayStrip: View {
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 22) {
+                HStack(spacing: 6) {
                     ForEach(range, id: \.self) { off in
                         Button {
-                            withAnimation(.snappy(duration: 0.3)) { selection = off }
+                            withAnimation(.smooth(duration: 0.4)) { selection = off }
                         } label: {
-                            VStack(spacing: 7) {
-                                Text(label(off))
-                                    .font(.subheadline.weight(selection == off ? .semibold : .regular))
-                                    .foregroundStyle(selection == off ? Color.primary : Color.secondary)
-                                ZStack {
-                                    Capsule().fill(.clear).frame(height: 3)
-                                    if selection == off {
-                                        Capsule().fill(Color.brand).frame(height: 3)
-                                            .matchedGeometryEffect(id: "underline", in: ns)
-                                    }
+                            VStack(spacing: 1) {
+                                Text(top(off)).font(.caption2.weight(.semibold)).textCase(.uppercase)
+                                    .foregroundStyle(selection == off ? Color.white.opacity(0.85) : Color.secondary)
+                                Text(bottom(off)).font(.subheadline.weight(.bold))
+                                    .foregroundStyle(selection == off ? Color.white : Color.primary)
+                            }
+                            .frame(minWidth: 52)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 7)
+                            .background {
+                                if selection == off {
+                                    Capsule()
+                                        .fill(LinearGradient(colors: [Color.brand, Color.brand.opacity(0.7)], startPoint: .top, endPoint: .bottom))
+                                        .shadow(color: Color.brand.opacity(0.5), radius: 10, y: 3)
+                                        .matchedGeometryEffect(id: "day", in: ns)
                                 }
                             }
-                            .fixedSize()
+                            .contentShape(Capsule())
                         }
                         .buttonStyle(.plain)
                         .id(off)
                     }
                 }
+                .padding(5)
+                .glassSurface(cornerRadius: 30)
                 .padding(.horizontal, 16)
-                .padding(.top, 8)
+                .padding(.vertical, 8)
             }
+            .sensoryFeedback(.selection, trigger: selection)
             .onAppear { proxy.scrollTo(selection, anchor: .center) }
-            .onChange(of: selection) { _, v in withAnimation(.snappy(duration: 0.3)) { proxy.scrollTo(v, anchor: .center) } }
+            .onChange(of: selection) { _, v in withAnimation(.smooth(duration: 0.4)) { proxy.scrollTo(v, anchor: .center) } }
         }
     }
 
-    func label(_ off: Int) -> String {
+    func top(_ off: Int) -> String {
         switch off {
         case -1: return "Hier"
-        case 0: return "Aujourd’hui"
+        case 0: return "Auj."
         case 1: return "Demain"
-        default:
-            let s = MatchesView.day(off).formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated).locale(fr))
-            return s.prefix(1).uppercased() + s.dropFirst()
+        default: return MatchesView.day(off).formatted(.dateTime.weekday(.abbreviated).locale(fr)).replacingOccurrences(of: ".", with: "")
         }
+    }
+
+    func bottom(_ off: Int) -> String {
+        MatchesView.day(off).formatted(.dateTime.day().locale(fr)) + " " + MatchesView.day(off).formatted(.dateTime.month(.abbreviated).locale(fr)).replacingOccurrences(of: ".", with: "")
     }
 }
 
@@ -142,6 +155,7 @@ struct DayPage: View {
     let isSelected: Bool
     let liveOnly: Bool
     let open: (Match) -> Void
+    var onPalette: ([Color]) -> Void = { _ in }
 
     @State private var matches: [Match] = []
     @State private var loading = true
@@ -153,32 +167,34 @@ struct DayPage: View {
         let followed = shown.filter { $0.involves(favs) }.sorted { $0.date < $1.date }
         let blocks = Self.blocks(shown)
 
-        List {
-            if !followed.isEmpty {
-                Section {
-                    HStack(spacing: 10) {
-                        Image(systemName: "star.fill").font(.system(size: 13)).foregroundStyle(Color.brand).frame(width: 20)
-                        Text("Mes équipes").font(.subheadline.weight(.semibold))
-                    }
+        ScrollView {
+            LazyVStack(spacing: 10) {
+                if !followed.isEmpty {
+                    SectionTitle(text: "Mes équipes", icon: "star.fill")
                     ForEach(followed) { m in
-                        PlainLink(value: Route.match(m)) { MatchRow(match: m) }
+                        NavigationLink(value: Route.match(m)) { MatchCard(match: m, showLeague: true) }
+                            .buttonStyle(Pressable())
+                            .floatIn()
                     }
                 }
-            }
-            ForEach(blocks) { b in
-                Section {
-                    PlainLink(value: Route.league(Competition.named(b.id) ?? Competition(id: b.id, name: b.name, area: "", group: .others))) {
+                ForEach(blocks) { b in
+                    NavigationLink(value: Route.league(Competition.named(b.id) ?? Competition(id: b.id, name: b.name, area: "", group: .others))) {
                         LeagueHeaderRow(league: b.id, name: b.name)
                     }
+                    .buttonStyle(.plain)
                     ForEach(b.matches) { m in
-                        PlainLink(value: Route.match(m)) { MatchRow(match: m) }
+                        NavigationLink(value: Route.match(m)) { MatchCard(match: m) }
+                            .buttonStyle(Pressable())
+                            .floatIn()
                     }
                 }
             }
+            .padding(.horizontal, 16)
+            .padding(.top, 4)
+            .padding(.bottom, 40)
+            .animation(.smooth(duration: 0.4), value: shown.map(\.id))
         }
-        .listStyle(.insetGrouped)
-        .listSectionSpacing(14)
-        .contentMargins(.top, 10, for: .scrollContent)
+        .scrollIndicators(.hidden)
         .overlay {
             LoadingOrEmpty(loading: loading && matches.isEmpty, empty: shown.isEmpty, failed: failed && matches.isEmpty,
                            emptyTitle: liveOnly ? "Aucun match en direct" : "Aucun match",
@@ -188,6 +204,7 @@ struct DayPage: View {
             }
         }
         .refreshable { await load() }
+        .onChange(of: isSelected) { _, sel in if sel { onPalette(Self.palette(matches, favs: store.favoriteIDs)) } }
         .task(id: TaskKey(enabled: store.enabled, active: isActive)) {
             guard isActive else { return }
             await load()
@@ -209,8 +226,25 @@ struct DayPage: View {
             store.setLogos(league, l)
         }
         failed = r.failed
-        if !r.failed || matches.isEmpty { matches = r.matches.sorted { $0.date < $1.date } }
+        if !r.failed || matches.isEmpty {
+            withAnimation(.smooth(duration: 0.4)) { matches = r.matches.sorted { $0.date < $1.date } }
+        }
         loading = false
+        if isSelected { onPalette(Self.palette(matches, favs: store.favoriteIDs)) }
+    }
+
+    /// Couleurs du fond : celles des équipes suivies, sinon des premiers matchs du jour.
+    static func palette(_ ms: [Match], favs: Set<String>) -> [Color] {
+        let ordered = ms.filter { $0.involves(favs) } + ms.filter { $0.state == .live } + ms
+        var out: [Color] = []
+        var seen = Set<String>()
+        for m in ordered {
+            for s in [m.home, m.away] where seen.insert(s.id).inserted && usableHex(s.color, s.altColor) != nil {
+                out.append(s.tint)
+                if out.count == 3 { return out }
+            }
+        }
+        return out.isEmpty ? [.brand] : out
     }
 
     static func blocks(_ ms: [Match]) -> [LeagueBlock] {

@@ -42,8 +42,8 @@ struct StatsView: View {
 
             if let h = value(home, "possessionPct"), let a = value(away, "possessionPct") {
                 PossessionBar(home: h, away: a, homeColor: colors.0, awayColor: colors.1)
-                    .padding(.horizontal, 14)
-                    .padding(.bottom, 12)
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 14)
             }
 
             ForEach(Self.wanted) { def in
@@ -55,9 +55,9 @@ struct StatsView: View {
                             homeColor: colors.0, awayColor: colors.1)
                 }
             }
-            .padding(.bottom, 6)
+            .padding(.bottom, 8)
         }
-        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .glassSurface(cornerRadius: 26, wash: [colors.0, colors.1], washOpacity: 0.12)
     }
 
     func raw(_ t: BoxTeam?, _ k: String) -> String? { t?.statistics.first { $0.name == k }?.displayValue }
@@ -83,31 +83,35 @@ struct PossessionBar: View {
     let away: Double
     let homeColor: Color
     let awayColor: Color
+    @State private var shown = false
+
     var body: some View {
         let total = max(home + away, 1)
+        let share = shown ? home / total : 0.5
         VStack(spacing: 8) {
-            Text("Possession").font(.footnote).foregroundStyle(.secondary)
+            Text("Possession").font(.footnote.weight(.semibold)).foregroundStyle(.secondary)
             GeometryReader { g in
-                HStack(spacing: 3) {
+                HStack(spacing: 4) {
                     Text("\(Int(home.rounded())) %")
-                        .font(.footnote.weight(.semibold).monospacedDigit())
+                        .font(.subheadline.weight(.bold).monospacedDigit())
                         .foregroundStyle(.white)
-                        .padding(.leading, 10)
-                        .frame(width: max(g.size.width * home / total - 1.5, 0), alignment: .leading)
+                        .padding(.leading, 14)
+                        .frame(width: max(g.size.width * share - 2, 0), alignment: .leading)
                         .frame(maxHeight: .infinity)
-                        .background(homeColor)
+                        .background(LinearGradient(colors: [homeColor, homeColor.opacity(0.65)], startPoint: .leading, endPoint: .trailing))
                     Text("\(Int(away.rounded())) %")
-                        .font(.footnote.weight(.semibold).monospacedDigit())
+                        .font(.subheadline.weight(.bold).monospacedDigit())
                         .foregroundStyle(.white)
-                        .padding(.trailing, 10)
-                        .frame(width: max(g.size.width * away / total - 1.5, 0), alignment: .trailing)
+                        .padding(.trailing, 14)
+                        .frame(width: max(g.size.width * (1 - share) - 2, 0), alignment: .trailing)
                         .frame(maxHeight: .infinity)
-                        .background(awayColor)
+                        .background(LinearGradient(colors: [awayColor.opacity(0.65), awayColor], startPoint: .leading, endPoint: .trailing))
                 }
                 .clipShape(Capsule())
             }
-            .frame(height: 28)
+            .frame(height: 36)
         }
+        .onAppear { withAnimation(.smooth(duration: 0.9).delay(0.1)) { shown = true } }
     }
 }
 
@@ -120,27 +124,48 @@ struct StatRow: View {
     let lowerIsBetter: Bool
     let homeColor: Color
     let awayColor: Color
+    @State private var shown = false
 
     var body: some View {
         let homeLeads = lowerIsBetter ? homeValue < awayValue : homeValue > awayValue
         let awayLeads = lowerIsBetter ? awayValue < homeValue : awayValue > homeValue
-        HStack {
-            pill(home, lead: homeLeads, color: homeColor)
-            Spacer()
-            Text(label).font(.subheadline).multilineTextAlignment(.center)
-            Spacer()
-            pill(away, lead: awayLeads, color: awayColor)
+        let total = homeValue + awayValue
+        let hShare = total > 0 ? homeValue / total : 0.5
+        VStack(spacing: 7) {
+            HStack {
+                Text(home)
+                    .font(.subheadline.weight(homeLeads ? .bold : .regular).monospacedDigit())
+                    .foregroundStyle(homeLeads ? Color.primary : Color.secondary)
+                Spacer()
+                Text(label).font(.footnote).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                Spacer()
+                Text(away)
+                    .font(.subheadline.weight(awayLeads ? .bold : .regular).monospacedDigit())
+                    .foregroundStyle(awayLeads ? Color.primary : Color.secondary)
+            }
+            GeometryReader { g in
+                let half = g.size.width / 2 - 2
+                HStack(spacing: 4) {
+                    ZStack(alignment: .trailing) {
+                        Capsule().fill(Color.primary.opacity(0.07))
+                        Capsule()
+                            .fill(LinearGradient(colors: [homeColor.opacity(0.5), homeColor], startPoint: .leading, endPoint: .trailing))
+                            .frame(width: shown ? half * min(hShare * 2, 1) : 0)
+                            .opacity(homeLeads ? 1 : 0.55)
+                    }
+                    ZStack(alignment: .leading) {
+                        Capsule().fill(Color.primary.opacity(0.07))
+                        Capsule()
+                            .fill(LinearGradient(colors: [awayColor, awayColor.opacity(0.5)], startPoint: .leading, endPoint: .trailing))
+                            .frame(width: shown ? half * min((1 - hShare) * 2, 1) : 0)
+                            .opacity(awayLeads ? 1 : 0.55)
+                    }
+                }
+            }
+            .frame(height: 6)
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 7)
-    }
-
-    func pill(_ s: String, lead: Bool, color: Color) -> some View {
-        Text(s)
-            .font(.subheadline.weight(lead ? .semibold : .regular).monospacedDigit())
-            .foregroundStyle(lead ? Color.white : Color.primary)
-            .padding(.horizontal, 9)
-            .frame(minWidth: 40, minHeight: 26)
-            .background(Capsule().fill(lead ? color : .clear))
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        .onAppear { withAnimation(.smooth(duration: 0.8).delay(0.15)) { shown = true } }
     }
 }

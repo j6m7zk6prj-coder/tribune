@@ -36,33 +36,34 @@ struct MatchDetailView: View {
     }
 
     var body: some View {
+        let colors = teamColors(match)
         ScrollView {
             VStack(spacing: 0) {
-                MatchHeader(match: match, events: events)
+                MatchHeader(match: match, events: events, colors: colors)
                     .padding(.horizontal, 16)
-                    .padding(.top, 8)
-                    .padding(.bottom, 18)
+                    .padding(.top, 4)
+                    .padding(.bottom, 22)
 
-                Picker("Section", selection: $tab) {
-                    ForEach(tabs) { Text($0.rawValue).tag($0) }
-                }
-                .pickerStyle(.segmented)
-                .padding(.horizontal, 16)
-                .padding(.bottom, 16)
+                GlassTabs(tabs: tabs, selection: $tab, tint: colors.0) { $0.rawValue }
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 16)
 
                 Group {
                     switch tab {
-                    case .facts: FactsView(match: match, events: events, summary: summary, loading: loading)
+                    case .facts: FactsView(match: match, events: events, summary: summary, loading: loading, colors: colors)
                     case .lineups: LineupView(match: match, rosters: summary?.rosters ?? [], events: events)
                     case .stats: StatsView(match: match, teams: summary?.boxTeams ?? [])
                     case .table: StandingsTable(league: match.league, highlight: [match.home.id, match.away.id], compact: false)
                     }
                 }
+                .transition(.opacity.combined(with: .offset(y: 12)))
+                .id(tab)
                 .padding(.horizontal, 16)
-                .padding(.bottom, 32)
+                .padding(.bottom, 40)
             }
         }
-        .background(Color(.systemGroupedBackground))
+        .scrollIndicators(.hidden)
+        .background { AmbientBackground(colors: [colors.0, colors.1, colors.0], intensity: 1.15) }
         .navigationTitle(match.leagueName)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -79,6 +80,7 @@ struct MatchDetailView: View {
                     }
                 } label: {
                     Image(systemName: store.isFavorite(match.home.id) || store.isFavorite(match.away.id) ? "star.fill" : "star")
+                        .contentTransition(.symbolEffect(.replace))
                 }
                 .accessibilityLabel("Suivre une équipe")
             }
@@ -96,8 +98,15 @@ struct MatchDetailView: View {
 
     func load() async {
         if let s = try? await ESPN.summary(match.league, event: match.id) {
-            summary = s
-            if let e = s.event, let m = Match(e, league: match.league, leagueName: match.leagueName) { match = m }
+            withAnimation(.smooth(duration: 0.4)) {
+                summary = s
+                if let e = s.event, var m = Match(e, league: match.league, leagueName: match.leagueName) {
+                    // L'en-tête de la fiche ne donne pas toujours les couleurs : on garde celles déjà connues.
+                    if m.home.color == nil { m.home.color = match.home.color; m.home.altColor = match.home.altColor }
+                    if m.away.color == nil { m.away.color = match.away.color; m.away.altColor = match.away.altColor }
+                    match = m
+                }
+            }
         }
         loading = false
     }
@@ -108,41 +117,45 @@ struct MatchDetailView: View {
 struct MatchHeader: View {
     let match: Match
     let events: [KeyEvent]
+    let colors: (Color, Color)
 
     var body: some View {
-        VStack(spacing: 14) {
+        VStack(spacing: 18) {
             HStack(alignment: .top, spacing: 0) {
-                TeamColumn(side: match.home, league: match.league)
-                VStack(spacing: 6) {
+                TeamColumn(side: match.home, league: match.league, tint: colors.0, delay: 0)
+                VStack(spacing: 10) {
                     if match.hasScore {
-                        Text("\(match.home.score ?? "0") - \(match.away.score ?? "0")")
-                            .font(.system(size: 34, weight: .bold).monospacedDigit())
-                            .contentTransition(.numericText())
+                        HStack(spacing: 10) {
+                            Text(match.home.score ?? "0").contentTransition(.numericText())
+                            Text("–").foregroundStyle(.secondary)
+                            Text(match.away.score ?? "0").contentTransition(.numericText())
+                        }
+                        .font(.system(size: 50, weight: .heavy, design: .rounded).monospacedDigit())
+                        .minimumScaleFactor(0.6)
+                        .lineLimit(1)
                         if let h = match.home.shootout, let a = match.away.shootout {
-                            Text("TAB \(h) - \(a)").font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                            Text("Tirs au but \(h) – \(a)").font(.caption.monospacedDigit()).foregroundStyle(.secondary)
                         }
                     } else {
                         Text(match.kickoff)
-                            .font(.system(size: 30, weight: .semibold).monospacedDigit())
+                            .font(.system(size: 40, weight: .bold, design: .rounded).monospacedDigit())
                     }
-                    Text(match.longStatus)
-                        .font(.footnote.weight(match.state == .live ? .semibold : .regular))
-                        .foregroundStyle(match.state == .live ? Color.brand : .secondary)
-                        .multilineTextAlignment(.center)
+                    StatusChip(match: match)
                 }
-                .frame(width: 130)
-                .padding(.top, 14)
-                TeamColumn(side: match.away, league: match.league)
+                .frame(width: 140)
+                .padding(.top, 16)
+                TeamColumn(side: match.away, league: match.league, tint: colors.1, delay: 1.3)
             }
 
             let goals = events.filter { $0.kind.isGoal }
             if !goals.isEmpty {
                 HStack(alignment: .top, spacing: 0) {
                     ScorerList(lines: Self.scorers(goals.filter { $0.teamID == match.home.id }), alignment: .trailing)
-                    Image(systemName: "soccerball").font(.system(size: 11)).foregroundStyle(.secondary)
-                        .frame(width: 36).padding(.top, 2)
+                    Image(systemName: "soccerball").font(.system(size: 12, weight: .semibold)).foregroundStyle(.secondary)
+                        .frame(width: 40).padding(.top, 1)
                     ScorerList(lines: Self.scorers(goals.filter { $0.teamID == match.away.id }), alignment: .leading)
                 }
+                .transition(.opacity)
             }
         }
     }
@@ -164,14 +177,31 @@ struct MatchHeader: View {
     }
 }
 
+struct StatusChip: View {
+    let match: Match
+    var body: some View {
+        HStack(spacing: 6) {
+            if match.state == .live { LiveDot() }
+            Text(match.longStatus)
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(match.state == .live ? Color.brand : Color.secondary)
+                .lineLimit(2)
+                .multilineTextAlignment(.center)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .glassSurface(cornerRadius: 16, tint: match.state == .live ? Color.brand : nil)
+    }
+}
+
 struct ScorerList: View {
     let lines: [String]
     let alignment: HorizontalAlignment
     var body: some View {
-        VStack(alignment: alignment, spacing: 3) {
+        VStack(alignment: alignment, spacing: 4) {
             ForEach(lines, id: \.self) { Text($0) }
         }
-        .font(.caption)
+        .font(.footnote)
         .foregroundStyle(.secondary)
         .multilineTextAlignment(alignment == .trailing ? .trailing : .leading)
         .frame(maxWidth: .infinity, alignment: alignment == .trailing ? .trailing : .leading)
@@ -181,19 +211,21 @@ struct ScorerList: View {
 struct TeamColumn: View {
     let side: Side
     let league: String
+    let tint: Color
+    var delay: Double = 0
     var body: some View {
         NavigationLink(value: Route.team(TeamRef(side, league: league))) {
-            VStack(spacing: 8) {
-                Logo(url: side.logo, size: 56)
+            VStack(spacing: 12) {
+                FloatingLogo(url: side.logo, tint: tint, size: 74, delay: delay)
                 Text(side.short)
-                    .font(.subheadline.weight(.semibold))
+                    .font(.headline)
                     .foregroundStyle(.primary)
                     .multilineTextAlignment(.center)
                     .lineLimit(2)
             }
             .frame(maxWidth: .infinity)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(Pressable())
     }
 }
 
@@ -204,25 +236,26 @@ struct FactsView: View {
     let events: [KeyEvent]
     let summary: SummaryResponse?
     let loading: Bool
+    let colors: (Color, Color)
 
     var body: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: 14) {
             let shown = events.filter { [EventKind]([.goal, .penaltyGoal, .ownGoal, .penaltyMissed, .yellow, .secondYellow, .red, .sub, .halftime]).contains($0.kind) }
             if !shown.isEmpty {
                 VStack(spacing: 0) {
                     ForEach(Array(timeline(shown).enumerated()), id: \.offset) { i, item in
-                        if i > 0 { Divider().padding(.leading, 16) }
                         item
                     }
                 }
-                .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .padding(.vertical, 6)
+                .glassSurface(cornerRadius: 26)
             } else if loading {
                 ProgressView().padding(.vertical, 40)
             } else if match.state == .pre {
                 InfoRow(icon: "clock", text: "Coup d’envoi à \(match.kickoff)")
-                    .padding(14)
+                    .padding(16)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .glassSurface(cornerRadius: 22)
             }
 
             VStack(alignment: .leading, spacing: 12) {
@@ -235,9 +268,9 @@ struct FactsView: View {
                     InfoRow(icon: "person.3", text: "\(a.formatted(.number.locale(fr))) spectateurs")
                 }
             }
-            .padding(14)
+            .padding(16)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .glassSurface(cornerRadius: 22)
         }
     }
 
@@ -247,11 +280,16 @@ struct FactsView: View {
         for e in evs {
             if e.kind == .halftime {
                 rows.append(AnyView(
-                    Text("Mi-temps  \(h) - \(a)")
-                        .font(.footnote.weight(.semibold).monospacedDigit())
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 10)
+                    HStack(spacing: 10) {
+                        Capsule().fill(Color.primary.opacity(0.12)).frame(height: 1)
+                        Text("Mi-temps  \(h) – \(a)")
+                            .font(.footnote.weight(.semibold).monospacedDigit())
+                            .foregroundStyle(.secondary)
+                            .fixedSize()
+                        Capsule().fill(Color.primary.opacity(0.12)).frame(height: 1)
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
                 ))
                 continue
             }
@@ -260,7 +298,7 @@ struct FactsView: View {
                 if e.teamID == match.home.id { h += 1 } else if e.teamID == match.away.id { a += 1 }
                 scoreText = "\(h) - \(a)"
             }
-            rows.append(AnyView(EventRow(event: e, isHome: e.teamID == match.home.id, score: scoreText)))
+            rows.append(AnyView(EventRow(event: e, isHome: e.teamID == match.home.id, score: scoreText, tint: e.teamID == match.home.id ? colors.0 : colors.1)))
         }
         return rows
     }
@@ -308,6 +346,7 @@ struct EventRow: View {
     let event: KeyEvent
     let isHome: Bool
     let score: String?
+    var tint: Color = .brand
 
     var body: some View {
         HStack(spacing: 12) {
@@ -325,6 +364,14 @@ struct EventRow: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 11)
+        .background {
+            if event.kind.isGoal {
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(LinearGradient(colors: isHome ? [tint.opacity(0.45), tint.opacity(0.05)] : [tint.opacity(0.05), tint.opacity(0.45)],
+                                         startPoint: .leading, endPoint: .trailing))
+                    .padding(.horizontal, 6)
+            }
+        }
     }
 
     private var minute: some View {

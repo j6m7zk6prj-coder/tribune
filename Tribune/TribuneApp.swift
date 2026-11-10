@@ -17,6 +17,7 @@ struct TribuneApp: App {
                 .environment(store)
                 .preferredColorScheme(store.appearance.scheme)
                 .tint(.brand)
+                .fontDesign(.rounded)
         }
     }
 }

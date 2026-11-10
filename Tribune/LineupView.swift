@@ -19,8 +19,8 @@ struct LineupView: View {
                           homeColor: colors.0, awayColor: colors.1, marks: marks)
                 TeamBar(side: match.away, formation: away?.formation)
             }
-            .background(Color(.secondarySystemGroupedBackground))
-            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
+            .glassSurface(cornerRadius: 26)
 
             Bench(title: "Remplaçants", home: home?.players.filter { !$0.starter } ?? [], away: away?.players.filter { !$0.starter } ?? [], marks: marks)
         }
@@ -82,9 +82,20 @@ struct PitchView: View {
             Half(lines: Array(Self.lines(away, formation: awayFormation).reversed()), color: awayColor, marks: marks)
         }
         .padding(.vertical, 10)
-        .frame(height: 660)
+        .frame(height: 640)
         .background { PitchLines() }
-        .background(Color(red: 0.13, green: 0.34, blue: 0.22))
+        .background {
+            ZStack {
+                Color(red: 0.06, green: 0.22, blue: 0.14)
+                // Bandes de tonte.
+                VStack(spacing: 0) {
+                    ForEach(0..<10, id: \.self) { i in
+                        Rectangle().fill(Color.white.opacity(i % 2 == 0 ? 0.035 : 0))
+                    }
+                }
+                LinearGradient(colors: [homeColor.opacity(0.42), .clear, .clear, awayColor.opacity(0.42)], startPoint: .top, endPoint: .bottom)
+            }
+        }
     }
 
     /// Range les titulaires en lignes, du gardien aux attaquants.
@@ -171,8 +182,11 @@ private struct PlayerDot: View {
         let id = player.athlete?.id ?? ""
         VStack(spacing: 4) {
             ZStack {
-                Circle().fill(color).frame(width: 34, height: 34)
-                    .overlay(Circle().strokeBorder(.white.opacity(0.85), lineWidth: 1.5))
+                Circle()
+                    .fill(LinearGradient(colors: [color, color.opacity(0.7)], startPoint: .top, endPoint: .bottom))
+                    .frame(width: 36, height: 36)
+                    .overlay(Circle().strokeBorder(.white.opacity(0.9), lineWidth: 1.5))
+                    .shadow(color: color.opacity(0.8), radius: 8)
                 Text(player.jersey ?? "")
                     .font(.system(size: 13, weight: .bold).monospacedDigit())
                     .foregroundStyle(.white)
@@ -258,7 +272,7 @@ private struct Bench: View {
                     column(away)
                 }
             }
-            .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .glassSurface(cornerRadius: 26)
         }
     }
 

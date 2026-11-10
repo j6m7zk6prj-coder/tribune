@@ -29,10 +29,10 @@ final class AppStore {
         if let i = args.firstIndex(of: "-appearance"), i + 1 < args.count, let a = Appearance(rawValue: args[i + 1]) { appearance = a }
         if args.contains("-seed") && favorites.isEmpty {
             favorites = [
-                TeamRef(id: "160", name: "Paris Saint-Germain", league: "fra.1", logo: nil),
-                TeamRef(id: "86", name: "Real Madrid", league: "esp.1", logo: nil),
-                TeamRef(id: "364", name: "Liverpool", league: "eng.1", logo: nil),
-                TeamRef(id: "478", name: "France", league: "uefa.nations", logo: nil),
+                TeamRef(id: "160", name: "Paris Saint-Germain", league: "fra.1", logo: nil, color: "004170"),
+                TeamRef(id: "86", name: "Real Madrid", league: "esp.1", logo: nil, color: "00529F"),
+                TeamRef(id: "364", name: "Liverpool", league: "eng.1", logo: nil, color: "C8102E"),
+                TeamRef(id: "478", name: "France", league: "uefa.nations", logo: nil, color: "1F3C88"),
             ]
         }
     }

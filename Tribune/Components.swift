@@ -92,16 +92,92 @@ struct MatchRow: View {
     }
 }
 
+/// Carte de match : deux lignes d'équipes, voile aux couleurs des deux clubs.
+struct MatchCard: View {
+    let match: Match
+    var showLeague = false
+
+    var body: some View {
+        let colors = teamColors(match)
+        HStack(spacing: 14) {
+            VStack(alignment: .leading, spacing: 11) {
+                teamLine(match.home, score: match.home.score, lost: match.state == .post && match.away.winner)
+                teamLine(match.away, score: match.away.score, lost: match.state == .post && match.home.winner)
+            }
+            Capsule().fill(Color.primary.opacity(0.12)).frame(width: 1).padding(.vertical, 2)
+            status.frame(width: 62)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
+        .glassSurface(cornerRadius: 24, wash: [colors.0, colors.1], washOpacity: match.state == .live ? 0.42 : 0.30)
+        .overlay {
+            if match.state == .live {
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .strokeBorder(Color.brand.opacity(0.55), lineWidth: 1)
+            }
+        }
+        .contentShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .accessibilityElement(children: .combine)
+    }
+
+    private func teamLine(_ s: Side, score: String?, lost: Bool) -> some View {
+        HStack(spacing: 11) {
+            Logo(url: s.logo, size: 26)
+            Text(s.short)
+                .font(.body.weight(.semibold))
+                .foregroundStyle(lost ? Color.secondary : Color.primary)
+                .lineLimit(1)
+            Spacer(minLength: 6)
+            if match.hasScore {
+                Text(score ?? "0")
+                    .font(.title3.weight(.bold).monospacedDigit())
+                    .foregroundStyle(lost ? Color.secondary : Color.primary)
+                    .contentTransition(.numericText())
+            }
+        }
+    }
+
+    @ViewBuilder private var status: some View {
+        VStack(spacing: 4) {
+            switch match.state {
+            case .live:
+                HStack(spacing: 5) {
+                    LiveDot()
+                    Text(match.shortStatus).font(.subheadline.weight(.bold).monospacedDigit()).foregroundStyle(Color.brand)
+                }
+                Text("En direct").font(.caption2).foregroundStyle(.secondary)
+            case .post:
+                Text(match.shortStatus).font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
+                if let h = match.home.shootout, let a = match.away.shootout {
+                    Text("\(h)-\(a) tab").font(.caption2.monospacedDigit()).foregroundStyle(.secondary)
+                }
+            case .pre:
+                Text(match.kickoff).font(.headline.monospacedDigit())
+                if showLeague { Text(match.leagueName).font(.caption2).foregroundStyle(.secondary).lineLimit(1) }
+            case .off:
+                Text(match.shortStatus).font(.subheadline).foregroundStyle(.secondary)
+                Text(match.kickoff).font(.caption2).strikethrough().foregroundStyle(.secondary)
+            }
+        }
+        .multilineTextAlignment(.center)
+    }
+}
+
 /// Ligne d'en-tête d'une compétition dans la liste des matchs.
 struct LeagueHeaderRow: View {
     let league: String
     let name: String
     var body: some View {
         HStack(spacing: 10) {
-            LeagueLogo(league: league, size: 20)
-            Text(name).font(.subheadline.weight(.semibold))
+            LeagueLogo(league: league, size: 24)
+            Text(name).font(.headline)
+            Image(systemName: "chevron.right").font(.caption.weight(.bold)).foregroundStyle(.tertiary)
             Spacer(minLength: 0)
         }
+        .padding(.horizontal, 6)
+        .padding(.top, 14)
+        .padding(.bottom, 2)
+        .contentShape(Rectangle())
     }
 }
 
