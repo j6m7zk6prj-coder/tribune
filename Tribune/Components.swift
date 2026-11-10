@@ -20,10 +20,11 @@ struct Logo: View {
 
 struct LeagueLogo: View {
     @Environment(AppStore.self) private var store
+    @Environment(\.colorScheme) private var scheme
     let league: String
     var size: CGFloat = 20
     var body: some View {
-        if let u = store.logo(for: league) {
+        if let u = store.logo(for: league, dark: scheme == .dark) {
             Logo(url: u, size: size)
         } else {
             Image(systemName: "trophy.fill")

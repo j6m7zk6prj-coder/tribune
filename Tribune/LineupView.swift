@@ -90,6 +90,21 @@ struct PitchView: View {
     /// Range les titulaires en lignes, du gardien aux attaquants.
     static func lines(_ players: [RosterPlayer], formation: String?) -> [[RosterPlayer]] {
         guard !players.isEmpty else { return [] }
+        // Si la formation est connue (ex. 3-4-2-1), on la respecte : joueurs triés du gardien
+        // vers l'attaque, puis découpés selon la formation.
+        let counts = (formation ?? "").split(separator: "-").compactMap { Int($0) }
+        if !counts.isEmpty, counts.reduce(0, +) == players.count - 1 {
+            let ordered = players.sorted {
+                (lineIndex($0.position), $0.formationPlace ?? 99) < (lineIndex($1.position), $1.formationPlace ?? 99)
+            }
+            var result: [[RosterPlayer]] = [[ordered[0]]]
+            var rest = Array(ordered.dropFirst())
+            for n in counts {
+                let line = rest.prefix(n).sorted { (sideIndex($0.position), $0.formationPlace ?? 99) < (sideIndex($1.position), $1.formationPlace ?? 99) }
+                result.append(line); rest = Array(rest.dropFirst(n))
+            }
+            return result
+        }
         let withPos = players.filter { $0.position != nil }
         if withPos.count >= players.count - 1 {
             var rows: [Int: [RosterPlayer]] = [:]

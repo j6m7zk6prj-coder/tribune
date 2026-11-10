@@ -48,11 +48,17 @@ final class AppStore {
         if let i = favorites.firstIndex(where: { $0.id == t.id }) { favorites.remove(at: i) } else { favorites.append(t) }
     }
 
-    func setLogo(_ league: String, _ url: URL) {
-        if leagueLogos[league] != url.absoluteString { leagueLogos[league] = url.absoluteString }
+    func setLogos(_ league: String, _ l: ESPNLeague) {
+        var copy = leagueLogos
+        if let u = l.lightLogo { copy[league] = u.absoluteString }
+        if let u = l.darkLogo { copy[league + "#dark"] = u.absoluteString }
+        if copy != leagueLogos { leagueLogos = copy }
     }
 
-    func logo(for league: String) -> URL? { leagueLogos[league].flatMap(URL.init(string:)) }
+    func logo(for league: String, dark: Bool = false) -> URL? {
+        let s = (dark ? leagueLogos[league + "#dark"] : nil) ?? leagueLogos[league]
+        return s.flatMap { URL(string: $0) }
+    }
 }
 
 /// Paramètres de lancement utilisés pour les captures d'écran automatiques.

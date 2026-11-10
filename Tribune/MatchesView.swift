@@ -205,8 +205,8 @@ struct DayPage: View {
     }
 
     func load() async {
-        let r = await ESPN.matches(on: day, competitions: store.enabledCompetitions) { league, url in
-            store.setLogo(league, url)
+        let r = await ESPN.matches(on: day, competitions: store.enabledCompetitions) { league, l in
+            store.setLogos(league, l)
         }
         failed = r.failed
         if !r.failed || matches.isEmpty { matches = r.matches.sorted { $0.date < $1.date } }

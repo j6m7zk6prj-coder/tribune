@@ -230,9 +230,17 @@ func teamColors(_ m: Match) -> (Color, Color) {
     }
     let h = usable(m.home.color) ?? usable(m.home.altColor)
     var a = usable(m.away.color)
-    if let hh = h, let aa = a {
-        let dist = abs(hh.0 - aa.0) + abs(hh.1 - aa.1) + abs(hh.2 - aa.2)
-        if dist < 0.45 { a = usable(m.away.altColor) }
+    func hue(_ c: (Double, Double, Double)) -> Double {
+        var hh: CGFloat = 0, s: CGFloat = 0, b: CGFloat = 0, al: CGFloat = 0
+        UIColor(red: c.0, green: c.1, blue: c.2, alpha: 1).getHue(&hh, saturation: &s, brightness: &b, alpha: &al)
+        return Double(hh)
+    }
+    func tooClose(_ x: (Double, Double, Double), _ y: (Double, Double, Double)) -> Bool {
+        let dh = abs(hue(x) - hue(y)), dist = abs(x.0 - y.0) + abs(x.1 - y.1) + abs(x.2 - y.2)
+        return min(dh, 1 - dh) < 0.09 || dist < 0.45
+    }
+    if let hh = h, let aa = a, tooClose(hh, aa) {
+        if let alt = usable(m.away.altColor), !tooClose(hh, alt) { a = alt } else { a = (0.55, 0.57, 0.62) }
     }
     let home = h.map { Color(red: $0.0, green: $0.1, blue: $0.2) } ?? .brand
     let away = a.map { Color(red: $0.0, green: $0.1, blue: $0.2) } ?? Color(.systemBlue)

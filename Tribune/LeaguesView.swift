@@ -45,16 +45,14 @@ struct LeaguesView: View {
 
     func fetchMissingLogos() async {
         let missing = Competition.all.filter { store.logo(for: $0.id) == nil }
-        await withTaskGroup(of: (String, URL?).self) { g in
+        await withTaskGroup(of: (String, ESPNLeague?).self) { g in
             for c in missing {
                 g.addTask {
                     let r = try? await ESPN.scoreboard(c.id)
-                    var url: URL? = nil
-                    if let h = r?.leagues.first?.logos.first?.href { url = URL(string: h) }
-                    return (c.id, url)
+                    return (c.id, r?.leagues.first)
                 }
             }
-            for await (id, url) in g { if let url { store.setLogo(id, url) } }
+            for await (id, l) in g { if let l { store.setLogos(id, l) } }
         }
     }
 }
@@ -123,16 +121,15 @@ struct CompetitionView: View {
 
     func load() async {
         let cal = Calendar.current
-        let from = cal.date(byAdding: .day, value: -14, to: .now) ?? .now
+        let from = cal.date(byAdding: .day, value: -10, to: .now) ?? .now
         let to = cal.date(byAdding: .day, value: 21, to: .now) ?? .now
         async let s = loadStandings(competition.id)
-        async let m = try? ESPN.scoreboard(competition.id, dates: "\(espnDay(from))-\(espnDay(to))")
+        async let m = ESPN.range(competition.id, from: from, to: to)
         let (st, sb) = await (s, m)
         standings = st
-        if let sb {
-            matches = sb.events.compactMap { Match($0, league: competition.id, leagueName: competition.name) }
-            if let l = sb.leagues.first?.logos.first?.href, let u = URL(string: l) { store.setLogo(competition.id, u) }
-        }
+        var seen = Set<String>()
+        matches = sb.events.compactMap { Match($0, league: competition.id, leagueName: competition.name) }.filter { seen.insert($0.id).inserted }
+        if let l = sb.league { store.setLogos(competition.id, l) }
         if (st ?? []).isEmpty { section = .matches }
         loading = false
     }

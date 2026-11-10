@@ -65,7 +65,11 @@ extension KeyedDecodingContainer where K == AnyKey {
 
 struct ESPNLogo: Decodable {
     let href: String?
-    init(from d: Decoder) throws { let c = try d.container(keyedBy: AnyKey.self); href = c.str(c["href"]) }
+    let rel: [String]
+    init(from d: Decoder) throws {
+        let c = try d.container(keyedBy: AnyKey.self); href = c.str(c["href"])
+        rel = ((try? c.decodeIfPresent([String].self, forKey: c["rel"])) ?? nil) ?? []
+    }
 }
 
 struct ESPNLeague: Decodable {
@@ -79,6 +83,8 @@ struct ESPNLeague: Decodable {
         id = c.str(c["id"]); name = c.str(c["name"]); abbreviation = c.str(c["abbreviation"])
         slug = c.str(c["slug"]); logos = c.list(ESPNLogo.self, c["logos"])
     }
+    var lightLogo: URL? { (logos.first { !$0.rel.contains("dark") } ?? logos.first)?.href.flatMap { URL(string: $0) } }
+    var darkLogo: URL? { logos.first { $0.rel.contains("dark") }?.href.flatMap { URL(string: $0) } }
 }
 
 struct ESPNTeam: Decodable {

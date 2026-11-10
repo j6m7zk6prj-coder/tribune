@@ -43,8 +43,27 @@ enum ESPN {
         return all.filter { seen.insert($0.id).inserted }
     }
 
+    /// Matchs d'une compétition sur une période (ESPN refuse les plages : une requête par jour).
+    static func range(_ league: String, from: Date, to: Date) async -> (events: [ESPNEvent], league: ESPNLeague?) {
+        let cal = Calendar.current
+        var days: [String] = []
+        var d = cal.startOfDay(for: from)
+        while d <= to { days.append(espnDay(d)); d = cal.date(byAdding: .day, value: 1, to: d) ?? to.addingTimeInterval(1) }
+        var events: [ESPNEvent] = []
+        var lg: ESPNLeague? = nil
+        await withTaskGroup(of: ScoreboardResponse?.self) { g in
+            var it = days.makeIterator()
+            for _ in 0..<6 { if let day = it.next() { g.addTask { await DayCache.shared.scoreboard(league, day: day) } } }
+            for await r in g {
+                if let day = it.next() { g.addTask { await DayCache.shared.scoreboard(league, day: day) } }
+                if let r { events += r.events; if lg == nil { lg = r.leagues.first } }
+            }
+        }
+        return (events, lg)
+    }
+
     /// Tous les matchs d'un jour (heure locale), pour les compétitions choisies.
-    static func matches(on day: Date, competitions: [Competition], onLogo: @escaping @MainActor (String, URL) -> Void) async -> (matches: [Match], failed: Bool) {
+    static func matches(on day: Date, competitions: [Competition], onLogo: @escaping @MainActor (String, ESPNLeague) -> Void) async -> (matches: [Match], failed: Bool) {
         let cal = Calendar.current
         let prev = cal.date(byAdding: .day, value: -1, to: day) ?? day
         // ESPN découpe les journées à l'heure de New York : on prend la veille aussi, puis on filtre.
@@ -59,7 +78,7 @@ enum ESPN {
             for await (c, r) in g {
                 if let job = it.next() { g.addTask { (job.0, await DayCache.shared.scoreboard(job.0.id, day: job.1)) } }
                 guard let r else { failures += 1; continue }
-                if let l = r.leagues.first?.logos.first?.href, let u = URL(string: l) { await onLogo(c.id, u) }
+                if let l = r.leagues.first { await onLogo(c.id, l) }
                 out += r.events.compactMap { Match($0, league: c.id) }.filter { cal.isDate($0.date, inSameDayAs: day) }
             }
         }
