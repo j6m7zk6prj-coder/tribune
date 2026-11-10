@@ -117,8 +117,8 @@ struct PitchView: View {
         let sorted = players.sorted { ($0.formationPlace ?? 99) < ($1.formationPlace ?? 99) }
         var result: [[RosterPlayer]] = [[sorted[0]]]
         var rest = Array(sorted.dropFirst())
-        let counts = (formation ?? "").split(separator: "-").compactMap { Int($0) }
-        for n in counts where !rest.isEmpty {
+        let fallbackCounts = (formation ?? "").split(separator: "-").compactMap { Int($0) }
+        for n in fallbackCounts where !rest.isEmpty {
             result.append(Array(rest.prefix(n))); rest = Array(rest.dropFirst(n))
         }
         if !rest.isEmpty { result.append(rest) }
