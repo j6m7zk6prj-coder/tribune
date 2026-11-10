@@ -53,7 +53,7 @@ enum PlayerAPI {
         b.height = metricHeight(s("displayHeight"), inches: a["height"] as? Double)
         b.weight = metricWeight(s("displayWeight"), pounds: a["weight"] as? Double)
         b.nationality = b.nationality.map(frenchCountry)
-        b.position = nested("position", "displayName")
+        b.position = nested("position", "displayName").map(translate)
         b.jersey = s("jersey") ?? s("displayJersey")
         b.team = nested("team", "displayName")
         b.headshot = nested("headshot", "href").flatMap { URL(string: $0) }
@@ -151,6 +151,11 @@ enum PlayerAPI {
         "penalty kick goals": "Penaltys marqués", "penalty kick shots": "Penaltys tirés", "accurate passes": "Passes réussies",
         "total passes": "Passes", "passing accuracy": "Précision des passes", "tackles": "Tacles", "interceptions": "Interceptions",
         "clearances": "Dégagements", "blocked shots": "Tirs contrés", "crosses": "Centres", "dribbles": "Dribbles",
+        "starts-substitute appearances": "Titulaire (remplaçant)", "goals against": "Buts encaissés", "total goals": "Buts",
+        "shots on goal": "Tirs cadrés", "goalkeeper": "Gardien", "defender": "Défenseur", "midfielder": "Milieu",
+        "forward": "Attaquant", "attacker": "Attaquant", "center back": "Défenseur central", "left back": "Latéral gauche",
+        "right back": "Latéral droit", "defensive midfielder": "Milieu défensif", "attacking midfielder": "Milieu offensif",
+        "center forward": "Avant-centre", "winger": "Ailier", "substitute": "Remplaçant",
     ]
     static func translate(_ s: String) -> String { frLabels[s.lowercased()] ?? s }
 }
@@ -266,7 +271,7 @@ struct PlayerSheet: View {
                 .multilineTextAlignment(.center)
             HStack(spacing: 8) {
                 Logo(url: side.logo, size: 20)
-                Text([bio?.position ?? player.positionName, side.short].compactMap { $0 }.joined(separator: " · "))
+                Text([bio?.position ?? player.positionName.map(PlayerAPI.translate), side.short].compactMap { $0 }.joined(separator: " · "))
                     .font(.subheadline).foregroundStyle(.secondary)
             }
             HStack(spacing: 6) {
