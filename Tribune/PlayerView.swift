@@ -50,8 +50,9 @@ enum PlayerAPI {
             b.birth = d.formatted(.dateTime.day().month(.wide).year().locale(fr))
         } else { b.birth = s("displayDOB") }
         b.nationality = s("citizenship") ?? nested("citizenshipCountry", "name") ?? nested("birthPlace", "country")
-        b.height = s("displayHeight")
-        b.weight = s("displayWeight")
+        b.height = metricHeight(s("displayHeight"), inches: a["height"] as? Double)
+        b.weight = metricWeight(s("displayWeight"), pounds: a["weight"] as? Double)
+        b.nationality = b.nationality.map(frenchCountry)
         b.position = nested("position", "displayName")
         b.jersey = s("jersey") ?? s("displayJersey")
         b.team = nested("team", "displayName")
@@ -60,15 +61,67 @@ enum PlayerAPI {
         return b
     }
 
-    /// Cherche dans la réponse toutes les catégories « libellés + totaux ».
+    /// 6' 4" → 1,93 m
+    static func metricHeight(_ display: String?, inches: Double?) -> String? {
+        var total = inches
+        if total == nil, let d = display {
+            let nums = d.split(whereSeparator: { !$0.isNumber }).compactMap { Double($0) }
+            if nums.count >= 1 { total = nums[0] * 12 + (nums.count > 1 ? nums[1] : 0) }
+            if d.contains("cm") || d.contains(" m") { return d }
+        }
+        guard let t = total, t > 40 else { return display }
+        let m = t * 2.54 / 100
+        return String(format: "%.2f m", m).replacingOccurrences(of: ".", with: ",")
+    }
+
+    /// 176 lbs → 80 kg
+    static func metricWeight(_ display: String?, pounds: Double?) -> String? {
+        if let d = display, d.contains("kg") { return d }
+        var lbs = pounds
+        if lbs == nil, let d = display { lbs = d.split(whereSeparator: { !$0.isNumber }).compactMap { Double($0) }.first }
+        guard let l = lbs, l > 60 else { return display }
+        return "\(Int((l * 0.4536).rounded())) kg"
+    }
+
+    /// « Netherlands » → « Pays-Bas »
+    static func frenchCountry(_ english: String) -> String {
+        let en = Locale(identifier: "en_US")
+        for r in Locale.Region.isoRegions {
+            if en.localizedString(forRegionCode: r.identifier)?.caseInsensitiveCompare(english) == .orderedSame {
+                return Locale(identifier: "fr_FR").localizedString(forRegionCode: r.identifier) ?? english
+            }
+        }
+        let special = ["England": "Angleterre", "Scotland": "Écosse", "Wales": "Pays de Galles", "Northern Ireland": "Irlande du Nord",
+                       "Ivory Coast": "Côte d’Ivoire", "USA": "États-Unis", "Korea Republic": "Corée du Sud", "Turkey": "Turquie"]
+        return special[english] ?? english
+    }
+
+    /// Statistiques de saison : résumé inclus dans la fiche ESPN, puis la page « overview ».
     static func season(league: String, id: String) async -> [StatGroup] {
-        guard let root = await json("\(base)/\(league)/athletes/\(id)/stats") else { return [] }
         var groups: [StatGroup] = []
+        if let root = await json("\(base)/\(league)/athletes/\(id)") as? [String: Any],
+           let a = (root["athlete"] as? [String: Any]) ?? Optional(root),
+           let sum = a["statsSummary"] as? [String: Any],
+           let list = sum["statistics"] as? [[String: Any]] {
+            let items: [(String, String)] = list.compactMap { d in
+                guard let label = (d["displayName"] as? String) ?? (d["name"] as? String) else { return nil }
+                let v = (d["displayValue"] as? String) ?? (d["value"].map { "\($0)" }) ?? "–"
+                return (translate(label), v)
+            }
+            if !items.isEmpty {
+                let title = (sum["displayName"] as? String).map { $0.replacingOccurrences(of: " Stats", with: "") } ?? "Saison"
+                groups.append(StatGroup(title: title, items: items))
+            }
+        }
+        guard let root = await json("\(base)/\(league)/athletes/\(id)/overview") ?? json("\(base)/\(league)/athletes/\(id)/stats") else { return groups }
         func walk(_ x: Any) {
             if let d = x as? [String: Any] {
                 let labels = (d["displayNames"] as? [String]) ?? (d["labels"] as? [String])
                 var values = (d["totals"] as? [Any])?.map { "\($0)" }
                 if values == nil, let st = d["statistics"] as? [[String: Any]], let last = st.last, let v = last["stats"] as? [Any] {
+                    values = v.map { "\($0)" }
+                }
+                if values == nil, let sp = d["splits"] as? [[String: Any]], let first = sp.first, let v = first["stats"] as? [Any] {
                     values = v.map { "\($0)" }
                 }
                 if let labels, let values, labels.count == values.count, !labels.isEmpty {

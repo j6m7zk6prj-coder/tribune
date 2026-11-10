@@ -34,7 +34,7 @@ struct LineupView: View {
                         opponent: pick.isHome ? match.away : match.home,
                         tint: pick.isHome ? colors.0 : colors.1, match: match, marks: marks)
         }
-        .onAppear {
+        .task(id: rosters.count) {
             // Capture d'écran automatique : ouvre la fiche du premier buteur.
             if Launch.args.contains("-player"), !Launch.consumed.contains("player"), let first = (home?.players ?? []).first(where: { marks.goals[$0.id] != nil }) ?? (away?.players ?? []).first(where: { marks.goals[$0.id] != nil }) ?? home?.players.first {
                 Launch.consumed.insert("player")

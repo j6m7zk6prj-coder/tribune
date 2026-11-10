@@ -44,11 +44,14 @@ struct DiagView: View {
            let sum = try? await ESPN.summary("eng.1", event: ev.id),
            let p = sum.rosters.first?.players.first(where: { $0.starter && $0.athlete?.id != nil }), let pid = p.athlete?.id {
             lines.append("joueur \(p.athlete?.displayName ?? "") id=\(pid) stats match=\(p.stats.map { "\($0.name)=\($0.displayValue ?? "")" }.joined(separator: ","))")
-            for u in ["\(PlayerAPI.base)/eng.1/athletes/\(pid)", "\(PlayerAPI.base)/eng.1/athletes/\(pid)/stats"] {
+            for u in ["\(PlayerAPI.base)/eng.1/athletes/\(pid)/overview", "\(PlayerAPI.base)/eng.1/athletes/\(pid)/gamelog"] {
                 if let r = try? await URLSession.shared.data(from: URL(string: u)!) {
                     let code = (r.1 as? HTTPURLResponse)?.statusCode ?? 0
                     lines.append(String(u.dropFirst(PlayerAPI.base.count)) + " → \(code) " + String(decoding: r.0.prefix(500), as: UTF8.self))
                 }
+            }
+            if let root = await PlayerAPI.json("\(PlayerAPI.base)/eng.1/athletes/\(pid)") as? [String: Any], let at = root["athlete"] as? [String: Any] {
+                lines.append("clés athlete: " + at.keys.sorted().joined(separator: ","))
             }
             let b = await PlayerAPI.bio(league: "eng.1", id: pid)
             lines.append("bio: âge=\(b?.age ?? "-") nat=\(b?.nationality ?? "-") taille=\(b?.height ?? "-") poste=\(b?.position ?? "-")")
