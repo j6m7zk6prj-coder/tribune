@@ -8,7 +8,7 @@ struct DiagView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 6) {
                 ForEach(Array(lines.enumerated()), id: \.offset) { _, l in
-                    Text(l).font(.system(size: 11, design: .monospaced))
+                    Text(l).font(.system(size: 8.5, design: .monospaced))
                 }
             }
             .padding()
@@ -22,7 +22,7 @@ struct DiagView: View {
         let code = (r.1 as? HTTPURLResponse)?.statusCode ?? 0
         var line = "\(label) → \(code), \(r.0.count) o"
         if let o = try? JSONSerialization.jsonObject(with: r.0) as? [String: Any], keys { line += " clés=" + o.keys.sorted().joined(separator: ",") }
-        line += " | " + String(decoding: r.0.prefix(260), as: UTF8.self)
+        line += " | " + String(decoding: r.0.prefix(170), as: UTF8.self)
         lines.append(line)
     }
 
