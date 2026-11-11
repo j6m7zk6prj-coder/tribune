@@ -40,7 +40,7 @@ enum CompetitionTheme {
     var stars: Bool { self == .champions }
 
     /// Logo clair : on le pose sur une pastille sombre plutôt que blanche.
-    var lightLogo: Bool { self != .champions }
+    var lightLogo: Bool { true }
 }
 
 /// Fond animé : dégradé profond, traînées de lumière sur le côté, étoiles pour la Ligue des champions.
