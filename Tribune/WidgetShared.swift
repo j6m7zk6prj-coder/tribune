@@ -21,6 +21,7 @@ struct WMatch: Identifiable {
     let homeImg: UIImage?
     let awayImg: UIImage?
     var leagueImg: UIImage? = nil
+    var leagueLight: Bool = true
     var id: String { match.id }
 }
 
@@ -66,7 +67,8 @@ enum WidgetData {
             var imgs: [Int: (UIImage?, UIImage?, UIImage?)] = [:]
             for await (i, h, a, l) in g { imgs[i] = (h, a, l) }
             return ms.enumerated().map { (i, m) -> WMatch in
-                WMatch(match: m, homeImg: imgs[i]?.0, awayImg: imgs[i]?.1, leagueImg: imgs[i]?.2)
+                let li = imgs[i]?.2
+                return WMatch(match: m, homeImg: imgs[i]?.0, awayImg: imgs[i]?.1, leagueImg: li, leagueLight: li.map { BadgeLoader.isLight($0) } ?? true)
             }
         }
     }
@@ -76,7 +78,7 @@ enum WidgetData {
 
 struct FollowedIntent: WidgetConfigurationIntent {
     static var title: LocalizedStringResource = "Mes équipes"
-    static var description = IntentDescription("Laisse vide pour reprendre les équipes suivies dans Tribune.")
+    static var description = IntentDescription("Jusqu’à 5 équipes. Laisse vide pour reprendre les équipes suivies dans Tribune.")
     @Parameter(title: "Équipes") var teams: [TeamEntity]?
 }
 
@@ -107,7 +109,7 @@ struct MatchesProvider: AppIntentTimelineProvider {
     }
 
     func limit(_ f: WidgetFamily) -> Int {
-        switch f { case .systemSmall: 1; case .systemMedium: 3; default: 6 }
+        switch f { case .systemSmall: 1; case .systemMedium: 2; default: 5 }
     }
 
     func load(teams: [TeamRef], limit: Int) async -> MatchesEntry {
@@ -117,7 +119,7 @@ struct MatchesProvider: AppIntentTimelineProvider {
         let ids = Set(teams.map(\.id))
         var nexts: [Match] = []
         await withTaskGroup(of: Match?.self) { g in
-            for t in teams.prefix(8) {
+            for t in teams.prefix(5) {
                 g.addTask {
                     let ms = await ESPN.teamMatches(t, upcomingOnly: true)
                     return ms.first { $0.state == .live } ?? ms.first { $0.state == .pre && $0.date > .now.addingTimeInterval(-3 * 3600) }
@@ -147,9 +149,18 @@ struct MatchesWidget: Widget {
 
 func shortDay(_ d: Date) -> String {
     let cal = Calendar.current
-    if cal.isDateInToday(d) { return "Aujourd’hui" }
+    if cal.isDateInToday(d) { return "" }
     if cal.isDateInTomorrow(d) { return "Demain" }
-    return d.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated).locale(fr)).capitalizedFirst
+    if let days = cal.dateComponents([.day], from: cal.startOfDay(for: .now), to: cal.startOfDay(for: d)).day, days < 7 {
+        return d.formatted(.dateTime.weekday(.abbreviated).locale(fr))
+    }
+    return d.formatted(.dateTime.day().month(.abbreviated).locale(fr))
+}
+
+/// Heure du match, précédée du jour s'il n'est pas aujourd'hui : « ven. 21:00 ».
+func whenText(_ m: Match) -> String {
+    let d = shortDay(m.date)
+    return d.isEmpty ? m.kickoff : "\(d) \(m.kickoff)"
 }
 
 struct MatchesWidgetView: View {
@@ -159,48 +170,109 @@ struct MatchesWidgetView: View {
     private var family: WidgetFamily { familyOverride ?? envFamily }
 
     var body: some View {
-        let first = entry.matches.first
-        let colors = first.map { teamColors($0.match) } ?? (Color.brand, Color(red: 0.1, green: 0.3, blue: 0.6))
-        Group {
+        let palette: [Color] = entry.matches.prefix(2).flatMap { m -> [Color] in let c = teamColors(m.match); return [c.0, c.1] }
+        VStack(alignment: .leading, spacing: family == .systemSmall ? 8 : 10) {
+            WidgetHeader(compact: family == .systemSmall, live: entry.matches.contains { $0.match.state == .live })
             if entry.matches.isEmpty {
-                VStack(spacing: 8) {
-                    Image(systemName: "star.circle.fill").font(.title)
-                    Text(entry.message ?? "Aucun match").font(.caption.weight(.semibold)).multilineTextAlignment(.center)
+                Spacer(minLength: 0)
+                Text(entry.message ?? "Aucun match").font(.caption.weight(.semibold)).foregroundStyle(.white.opacity(0.75))
+                    .multilineTextAlignment(.center).frame(maxWidth: .infinity)
+                Spacer(minLength: 0)
+            } else if family == .systemSmall, let m = entry.matches.first {
+                MatchTile(m: m, followed: entry.followed)
+            } else if family == .systemMedium {
+                HStack(spacing: 8) {
+                    ForEach(entry.matches.prefix(2)) { m in MatchTile(m: m, followed: entry.followed) }
                 }
-                .foregroundStyle(.white)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if family == .systemSmall, let m = first {
-                SmallMatch(m: m)
             } else {
-                VStack(alignment: .leading, spacing: family == .systemLarge ? 8 : 6) {
-                    HStack(spacing: 6) {
-                        Image(systemName: "star.fill").font(.caption2)
-                        Text("Mes équipes").font(.caption.weight(.heavy))
-                        Spacer()
-                        if entry.matches.contains(where: { $0.match.state == .live }) {
-                            HStack(spacing: 4) { Circle().fill(Color.green).frame(width: 6, height: 6); Text("En direct").font(.caption2.weight(.bold)) }
-                        }
+                VStack(spacing: 0) {
+                    ForEach(Array(entry.matches.prefix(5).enumerated()), id: \.element.id) { i, m in
+                        if i > 0 { Rectangle().fill(.white.opacity(0.09)).frame(height: 0.5).padding(.horizontal, 14) }
+                        FollowRow(m: m, followed: entry.followed)
                     }
-                    .foregroundStyle(.white.opacity(0.9))
-                    ForEach(entry.matches) { m in WideRow(m: m, large: family == .systemLarge, followed: entry.followed) }
-                    Spacer(minLength: 0)
                 }
+                .glassPanel()
+                Spacer(minLength: 0)
+                HStack(spacing: 4) {
+                    Image(systemName: "arrow.triangle.2.circlepath").font(.caption2.weight(.semibold))
+                    Text(entry.date, style: .time).font(.caption2.weight(.semibold).monospacedDigit())
+                }
+                .foregroundStyle(.white.opacity(0.45))
+                .frame(maxWidth: .infinity)
             }
         }
         .fontDesign(.rounded)
-        .widgetBackground(WidgetBackground(a: colors.0, b: colors.1), inApp: familyOverride != nil)
+        .widgetBackground(WidgetGlassBackground(colors: palette), inApp: familyOverride != nil)
     }
 }
 
-struct WidgetBackground: View {
-    let a: Color
-    let b: Color
+/// « ★ Suivis » et la marque Tribune.
+struct WidgetHeader: View {
+    var compact = false
+    var live = false
+    var body: some View {
+        HStack(spacing: 7) {
+            Image(systemName: "star.fill").font(.system(size: compact ? 12 : 15, weight: .bold))
+            Text("Suivis").font(.system(size: compact ? 14 : 18, weight: .heavy, design: .rounded))
+            if live {
+                Circle().fill(Color.green).frame(width: 6, height: 6)
+                Text("LIVE").font(.system(size: 9, weight: .heavy)).foregroundStyle(.green)
+            }
+            Spacer()
+            TribuneMark(size: compact ? 18 : 24)
+        }
+        .foregroundStyle(.white)
+    }
+}
+
+/// Petite marque de l'app : les trois gradins et le ballon.
+struct TribuneMark: View {
+    var size: CGFloat
     var body: some View {
         ZStack {
-            Color.black
-            LinearGradient(colors: [a.opacity(0.95), b.opacity(0.85)], startPoint: .topLeading, endPoint: .bottomTrailing)
-            RadialGradient(colors: [.white.opacity(0.18), .clear], center: .topLeading, startRadius: 0, endRadius: 220)
-            LinearGradient(colors: [.clear, .black.opacity(0.35)], startPoint: .top, endPoint: .bottom)
+            Circle().fill(.white.opacity(0.95))
+            HStack(alignment: .bottom, spacing: size * 0.06) {
+                ForEach(0..<3, id: \.self) { i in
+                    RoundedRectangle(cornerRadius: size * 0.05)
+                        .fill(Color(red: 0.05, green: 0.6, blue: 0.33))
+                        .frame(width: size * 0.15, height: size * (0.16 + 0.13 * Double(i)))
+                }
+            }
+            .offset(y: size * 0.08)
+        }
+        .frame(width: size, height: size)
+    }
+}
+
+/// Panneau en verre : voile clair, liseré lumineux.
+extension View {
+    func glassPanel(radius: CGFloat = 22) -> some View {
+        self
+            .background(RoundedRectangle(cornerRadius: radius, style: .continuous).fill(.white.opacity(0.07)))
+            .overlay(RoundedRectangle(cornerRadius: radius, style: .continuous)
+                .strokeBorder(LinearGradient(colors: [.white.opacity(0.28), .white.opacity(0.05)], startPoint: .top, endPoint: .bottom), lineWidth: 0.7))
+    }
+}
+
+/// Fond sombre avec halos aux couleurs des équipes, façon Liquid Glass.
+struct WidgetGlassBackground: View {
+    let colors: [Color]
+    var body: some View {
+        let cs = colors.isEmpty ? [Color.brand, Color(red: 0.2, green: 0.3, blue: 0.7)] : colors
+        ZStack {
+            Color(red: 0.06, green: 0.07, blue: 0.09)
+            GeometryReader { g in
+                ZStack {
+                    Circle().fill(cs[0]).frame(width: g.size.width * 0.9).position(x: g.size.width * 0.1, y: g.size.height * 0.05)
+                    Circle().fill(cs[min(1, cs.count - 1)]).frame(width: g.size.width * 0.8).position(x: g.size.width * 0.95, y: g.size.height * 0.55)
+                    if cs.count > 2 {
+                        Circle().fill(cs[2]).frame(width: g.size.width * 0.7).position(x: g.size.width * 0.2, y: g.size.height * 1.0)
+                    }
+                }
+                .opacity(0.38)
+                .blur(radius: 50)
+            }
+            LinearGradient(colors: [.white.opacity(0.10), .clear], startPoint: .top, endPoint: .center)
         }
     }
 }
@@ -211,97 +283,110 @@ struct WLogo: View {
     var body: some View {
         Group {
             if let img { Image(uiImage: img).resizable().scaledToFit() }
-            else { Circle().fill(.white.opacity(0.25)) }
+            else { Circle().fill(.white.opacity(0.18)) }
         }
         .frame(width: size, height: size)
-        .shadow(color: .black.opacity(0.25), radius: 3, y: 1)
+        .shadow(color: .black.opacity(0.3), radius: 3, y: 1)
     }
 }
 
-/// Logo de compétition sur une petite pastille blanche (lisible sur tous les fonds).
+/// Logo de compétition : tel quel s'il est clair, sur une pastille blanche s'il est foncé.
 struct WLeague: View {
     let img: UIImage?
-    var size: CGFloat = 16
+    var light: Bool = true
+    var size: CGFloat = 22
     var body: some View {
         if let img {
             Image(uiImage: img).resizable().scaledToFit()
-                .padding(size * 0.14)
+                .padding(light ? 0 : size * 0.16)
                 .frame(width: size, height: size)
-                .background(Circle().fill(.white.opacity(0.92)))
+                .background { if !light { Circle().fill(.white.opacity(0.92)) } }
         }
     }
 }
 
-struct SmallMatch: View {
-    let m: WMatch
+/// Une équipe : logo et abréviation.
+struct TeamStack: View {
+    let side: Side
+    let img: UIImage?
+    var size: CGFloat = 34
+    var bold = false
     var body: some View {
-        VStack(spacing: 7) {
-            HStack(spacing: 5) {
-                WLeague(img: m.leagueImg, size: 16)
-                Text(m.match.leagueName).font(.caption2.weight(.bold)).lineLimit(1)
-            }
-            .foregroundStyle(.white.opacity(0.85))
-            HStack(spacing: 10) {
-                WLogo(img: m.homeImg, size: 40)
-                WLogo(img: m.awayImg, size: 40)
-            }
-            if m.match.hasScore {
-                Text("\(m.match.home.score ?? "0") – \(m.match.away.score ?? "0")")
-                    .font(.system(size: 28, weight: .heavy, design: .rounded).monospacedDigit())
-            } else {
-                Text(m.match.kickoff).font(.system(size: 26, weight: .bold, design: .rounded).monospacedDigit())
-            }
-            Text(m.match.state == .live ? "En direct · \(m.match.shortStatus)" : shortDay(m.match.date))
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(m.match.state == .live ? Color.green : .white.opacity(0.85))
+        VStack(spacing: 5) {
+            WLogo(img: img, size: size)
+            Text(side.abbr.isEmpty ? String(side.short.prefix(3)).uppercased() : side.abbr)
+                .font(.system(size: size * 0.42, weight: bold ? .heavy : .bold, design: .rounded))
+                .foregroundStyle(.white.opacity(bold ? 1 : 0.92))
+                .lineLimit(1)
         }
-        .foregroundStyle(.white)
+    }
+}
+
+/// Centre d'un match : logo de compétition puis heure (ou score en direct).
+struct MatchCenter: View {
+    let m: WMatch
+    var compact = false
+    var body: some View {
+        VStack(spacing: compact ? 4 : 7) {
+            WLeague(img: m.leagueImg, light: m.leagueLight, size: compact ? 18 : 24)
+            if m.match.hasScore {
+                Text("\(m.match.home.score ?? "0") - \(m.match.away.score ?? "0")")
+                    .font(.system(size: compact ? 17 : 21, weight: .heavy, design: .rounded).monospacedDigit())
+                    .foregroundStyle(.white)
+                Text(m.match.state == .live ? m.match.shortStatus : "Fin")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(m.match.state == .live ? Color.green : .white.opacity(0.55))
+            } else {
+                Text(whenText(m.match))
+                    .font(.system(size: compact ? 13 : 17, weight: .semibold, design: .rounded).monospacedDigit())
+                    .foregroundStyle(.white.opacity(0.62))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+            }
+        }
+    }
+}
+
+/// Ligne du grand widget, comme le modèle : équipe — compétition + heure — équipe.
+struct FollowRow: View {
+    let m: WMatch
+    let followed: Set<String>
+    var body: some View {
+        HStack(spacing: 0) {
+            TeamStack(side: m.match.home, img: m.homeImg, size: 30, bold: followed.contains(m.match.home.id))
+                .frame(width: 70)
+            Spacer(minLength: 0)
+            MatchCenter(m: m)
+            Spacer(minLength: 0)
+            TeamStack(side: m.match.away, img: m.awayImg, size: 30, bold: followed.contains(m.match.away.id))
+                .frame(width: 70)
+        }
+        .padding(.horizontal, 6)
+        .padding(.vertical, 9)
+        .background {
+            if m.match.state == .live {
+                LinearGradient(colors: [Color.green.opacity(0.18), .clear], startPoint: .leading, endPoint: .trailing)
+            }
+        }
+    }
+}
+
+/// Carte d'un match pour les petits et moyens formats.
+struct MatchTile: View {
+    let m: WMatch
+    let followed: Set<String>
+    var body: some View {
+        VStack(spacing: 6) {
+            HStack(alignment: .center, spacing: 4) {
+                TeamStack(side: m.match.home, img: m.homeImg, size: 28, bold: followed.contains(m.match.home.id))
+                Spacer(minLength: 2)
+                TeamStack(side: m.match.away, img: m.awayImg, size: 28, bold: followed.contains(m.match.away.id))
+            }
+            MatchCenter(m: m, compact: true)
+        }
+        .padding(10)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-}
-
-struct WideRow: View {
-    let m: WMatch
-    let large: Bool
-    var followed: Set<String> = []
-
-    var body: some View {
-        let colors = teamColors(m.match)
-        HStack(spacing: 8) {
-            WLogo(img: m.homeImg, size: large ? 24 : 20)
-            Text(m.match.home.short)
-                .font(.subheadline.weight(followed.contains(m.match.home.id) ? .heavy : .medium)).lineLimit(1)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            center.frame(width: 76)
-            Text(m.match.away.short)
-                .font(.subheadline.weight(followed.contains(m.match.away.id) ? .heavy : .medium)).lineLimit(1)
-                .frame(maxWidth: .infinity, alignment: .trailing)
-            WLogo(img: m.awayImg, size: large ? 24 : 20)
-        }
-        .foregroundStyle(.white)
-        .padding(.horizontal, 10)
-        .padding(.vertical, large ? 8 : 5)
-        .background(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(LinearGradient(colors: [colors.0.opacity(0.55), colors.1.opacity(0.55)], startPoint: .leading, endPoint: .trailing))
-                .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(.white.opacity(0.08)))
-        )
-    }
-
-    @ViewBuilder private var center: some View {
-        VStack(spacing: 1) {
-            if m.match.hasScore {
-                Text("\(m.match.home.score ?? "0") – \(m.match.away.score ?? "0")").font(.subheadline.weight(.heavy).monospacedDigit())
-                Text(m.match.shortStatus).font(.system(size: 9, weight: .bold)).foregroundStyle(m.match.state == .live ? Color.green : .white.opacity(0.7))
-            } else {
-                Text(m.match.kickoff).font(.subheadline.weight(.bold).monospacedDigit())
-                HStack(spacing: 3) {
-                    WLeague(img: m.leagueImg, size: 11)
-                    Text(shortDay(m.match.date)).font(.system(size: 9, weight: .bold)).lineLimit(1)
-                }
-                .foregroundStyle(.white.opacity(0.8))
-            }
-        }
+        .glassPanel(radius: 18)
     }
 }
 
@@ -455,7 +540,7 @@ struct TeamWidgetView: View {
         }
         .foregroundStyle(.white)
         .fontDesign(.rounded)
-        .widgetBackground(WidgetBackground(a: entry.tint, b: entry.tint.opacity(0.55)), inApp: familyOverride != nil)
+        .widgetBackground(WidgetGlassBackground(colors: [entry.tint, entry.tint.opacity(0.7), entry.tint]), inApp: familyOverride != nil)
     }
 
     private func opponent(_ m: Match) -> String { m.home.id == entry.teamID ? m.away.short : m.home.short }
@@ -502,13 +587,13 @@ struct WidgetPreviewView: View {
                     .font(.footnote).foregroundStyle(.secondary)
                 if let m = matches {
                     HStack(alignment: .top, spacing: 14) {
-                        MatchesWidgetView(entry: MatchesEntry(date: m.date, matches: Array(m.matches.prefix(1))), familyOverride: .systemSmall)
+                        MatchesWidgetView(entry: MatchesEntry(date: m.date, matches: Array(m.matches.prefix(1)), followed: m.followed), familyOverride: .systemSmall)
                             .frame(width: 170, height: 170)
                         if let t = team {
                             TeamWidgetView(entry: t, familyOverride: .systemSmall).frame(width: 170, height: 170)
                         }
                     }
-                    MatchesWidgetView(entry: MatchesEntry(date: m.date, matches: Array(m.matches.prefix(3))), familyOverride: .systemMedium)
+                    MatchesWidgetView(entry: MatchesEntry(date: m.date, matches: Array(m.matches.prefix(2)), followed: m.followed), familyOverride: .systemMedium)
                         .frame(height: 170)
                     if let t = team { TeamWidgetView(entry: t, familyOverride: .systemMedium).frame(height: 170) }
                     MatchesWidgetView(entry: m, familyOverride: .systemLarge).frame(height: 380)
@@ -522,7 +607,7 @@ struct WidgetPreviewView: View {
         .navigationTitle("Widgets")
         .navigationBarTitleDisplayMode(.inline)
         .task {
-            async let m = MatchesProvider().load(teams: WidgetData.followed(), limit: 6)
+            async let m = MatchesProvider().load(teams: WidgetData.followed(), limit: 5)
             async let t = TeamProvider().load(TeamProvider.fallback)
             let (mm, tt) = await (m, t)
             withAnimation(.smooth) { matches = mm; team = tt }
