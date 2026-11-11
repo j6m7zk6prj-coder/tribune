@@ -100,7 +100,7 @@ enum SportsDB {
                 return l.contains("promotion") ? Color.green : l.contains("relegation") ? Color.red : Color.blue
             }
             return StandingRow(id: "sdb" + tid, rank: Int(str(r, "intRank") ?? "") ?? i + 1,
-                               team: TeamRef(id: "sdb" + tid, name: str(r, "strTeam") ?? "—", league: slug, logo: badge(str(r, "strBadge"))?.absoluteString),
+                               team: TeamRef(id: "sdb" + tid, name: str(r, "strTeam") ?? "—", league: slug, logo: str(r, "strBadge")),
                                played: n("intPlayed"), diff: n("intGoalDifference"), points: n("intPoints"),
                                won: n("intWin"), drawn: n("intDraw"), lost: n("intLoss"),
                                noteColor: color, noteText: desc)
