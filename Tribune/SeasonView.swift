@@ -234,6 +234,7 @@ struct Leader: Identifiable {
     let name: String
     let teamID: String?
     let value: String
+    var detail: String? = nil
     var teamLogo: URL? { teamID.flatMap { URL(string: "https://a.espncdn.com/i/teamlogos/soccer/500/\($0).png") } }
 }
 
@@ -277,8 +278,18 @@ enum LeadersAPI {
                             guard let range = r.range(of: "/teams/") else { return nil }
                             return String(r[range.upperBound...].prefix { $0.isNumber })
                         }
-                        let v = (l["displayValue"] as? String) ?? (l["value"] as? Double).map { String(Int($0)) } ?? ""
-                        return (i, Leader(name: name, teamID: teamID, value: v))
+                        // « Matches: 35, Goals: 27 » → valeur 27, détail « 35 matchs »
+                        let display = (l["displayValue"] as? String) ?? ""
+                        var v = (l["value"] as? Double).map { String(Int($0)) } ?? display
+                        var detail: String? = nil
+                        let parts = display.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
+                        if parts.count > 1 {
+                            if let last = parts.last?.split(separator: ":").last { v = last.trimmingCharacters(in: .whitespaces) }
+                            if let m = parts.first(where: { $0.lowercased().hasPrefix("match") })?.split(separator: ":").last {
+                                detail = "\(m.trimmingCharacters(in: .whitespaces)) matchs"
+                            }
+                        }
+                        return (i, Leader(name: name, teamID: teamID, value: v, detail: detail))
                     }
                 }
                 var res: [(Int, Leader)] = []
@@ -304,7 +315,10 @@ struct LeadersView: View {
                         HStack(spacing: 12) {
                             Text("\(i + 1)").font(.subheadline.weight(.bold).monospacedDigit()).foregroundStyle(i == 0 ? tint : Color.secondary).frame(width: 22)
                             Logo(url: l.teamLogo, size: 26)
-                            Text(l.name).font(.body.weight(i == 0 ? .bold : .medium)).lineLimit(1)
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(l.name).font(.body.weight(i == 0 ? .bold : .medium)).lineLimit(1)
+                                if let d = l.detail { Text(d).font(.caption).foregroundStyle(.secondary) }
+                            }
                             Spacer()
                             Text(l.value)
                                 .font(.headline.monospacedDigit())
@@ -318,7 +332,6 @@ struct LeadersView: View {
                 }
                 .padding(.vertical, 4)
                 .glassSurface(cornerRadius: 24, wash: [tint], washOpacity: 0.12)
-                .floatIn()
             }
         }
     }
