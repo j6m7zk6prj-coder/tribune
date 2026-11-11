@@ -89,11 +89,11 @@ struct ClubGoalStyle {
 // MARK: - Courbes d'animation
 
 enum Ease {
-    static func seg(_ t: Double, _ a: Double, _ b: Double) -> Double { max(0, min(1, (t - a) / (b - a))) }
-    static func outCubic(_ x: Double) -> Double { 1 - pow(1 - x, 3) }
-    static func inOutCubic(_ x: Double) -> Double { x < 0.5 ? 4 * x * x * x : 1 - pow(-2 * x + 2, 3) / 2 }
-    static func outBack(_ x: Double, _ s: Double = 1.7) -> Double { let c3 = s + 1; return 1 + c3 * pow(x - 1, 3) + s * pow(x - 1, 2) }
-    static func outBounce(_ x: Double) -> Double {
+    static func seg(_ t: CGFloat, _ a: CGFloat, _ b: CGFloat) -> CGFloat { max(0, min(1, (t - a) / (b - a))) }
+    static func outCubic(_ x: CGFloat) -> CGFloat { 1 - pow(1 - x, 3) }
+    static func inOutCubic(_ x: CGFloat) -> CGFloat { x < 0.5 ? 4 * x * x * x : 1 - pow(-2 * x + 2, 3) / 2 }
+    static func outBack(_ x: CGFloat, _ s: CGFloat = 1.7) -> CGFloat { let c3 = s + 1; return 1 + c3 * pow(x - 1, 3) + s * pow(x - 1, 2) }
+    static func outBounce(_ x: CGFloat) -> CGFloat {
         let n1 = 7.5625, d1 = 2.75
         if x < 1 / d1 { return n1 * x * x }
         if x < 2 / d1 { let y = x - 1.5 / d1; return n1 * y * y + 0.75 }
@@ -129,15 +129,15 @@ struct GoalOverlay: View {
 
     @State private var start = Date()
     @State private var closing: Date? = nil
-    private let total = 3.4
+    private let total: CGFloat = 3.4
 
     var body: some View {
         let style = ClubGoalStyle.forTeam(replay.side)
         TimelineView(.animation) { tl in
-            let raw = Launch.value("-goalhold").flatMap { Double($0) } ?? tl.date.timeIntervalSince(start)
+            let raw = CGFloat(Launch.value("-goalhold").flatMap { Double($0) } ?? tl.date.timeIntervalSince(start))
             let t = min(raw, total)
             // Fermeture anticipée : fondu rapide.
-            let out = closing.map { Ease.seg(tl.date.timeIntervalSince($0), 0, 0.28) } ?? Ease.seg(t, 2.95, 3.35)
+            let out = closing.map { Ease.seg(CGFloat(tl.date.timeIntervalSince($0)), 0, 0.28) } ?? Ease.seg(t, 2.95, 3.35)
             let inA = Ease.outCubic(Ease.seg(t, 0, 0.3))
             let alpha = inA * (1 - out)
 
@@ -190,7 +190,7 @@ struct GoalOverlay: View {
 struct ScoreBar: View {
     let replay: GoalReplay
     let style: ClubGoalStyle
-    let t: Double
+    let t: CGFloat
 
     var body: some View {
         let wipeIn = Ease.inOutCubic(Ease.seg(t, 0.3, 0.66))
@@ -259,7 +259,7 @@ struct TeamChip: View {
 struct FlipDigit: View {
     let old: Int
     let new: Int
-    let p: Double
+    let p: CGFloat
     var body: some View {
         ZStack {
             Text("\(old)")
@@ -276,10 +276,10 @@ struct FlipDigit: View {
 
 /// Forme du volet : bande inclinée entre deux positions (0…1).
 struct Parallelogram: Shape {
-    var from: Double
-    var to: Double
+    var from: CGFloat
+    var to: CGFloat
     let skew: CGFloat
-    var animatableData: AnimatablePair<Double, Double> {
+    var animatableData: AnimatablePair<CGFloat, CGFloat> {
         get { AnimatablePair(from, to) }
         set { from = newValue.first; to = newValue.second }
     }
@@ -299,7 +299,7 @@ struct Parallelogram: Shape {
 /// Contenu du volet : motif de fond, « GOAL » lettre par lettre, reflet.
 struct WipeLayer: View {
     let style: ClubGoalStyle
-    let t: Double
+    let t: CGFloat
     let w: CGFloat
     let h: CGFloat
 
@@ -308,7 +308,7 @@ struct WipeLayer: View {
             WipePattern(style: style)
             HStack(spacing: 2) {
                 ForEach(Array("GOAL".enumerated()), id: \.offset) { i, ch in
-                    letter(String(ch), q: Ease.seg(t, 0.72 + Double(i) * 0.085, 1.07 + Double(i) * 0.085))
+                    letter(String(ch), q: Ease.seg(t, 0.72 + CGFloat(i) * 0.085, 1.07 + CGFloat(i) * 0.085))
                 }
             }
             .padding(.leading, 56)
@@ -324,7 +324,7 @@ struct WipeLayer: View {
         .frame(width: w, height: h)
     }
 
-    @ViewBuilder private func letter(_ s: String, q: Double) -> some View {
+    @ViewBuilder private func letter(_ s: String, q: CGFloat) -> some View {
         let base = Text(s)
             .font(.system(size: 44, weight: .black, design: .rounded).italic())
             .foregroundStyle(style.text)
@@ -372,7 +372,7 @@ struct WipePattern: View {
                     while x < size.width + s {
                         var p = Path()
                         for k in 0..<6 {
-                            let a = Double(k) * .pi / 3 + .pi / 6
+                            let a = CGFloat(k) * .pi / 3 + .pi / 6
                             let pt = CGPoint(x: x + cos(a) * s * 0.9, y: y + sin(a) * s * 0.9)
                             if k == 0 { p.move(to: pt) } else { p.addLine(to: pt) }
                         }
@@ -415,8 +415,8 @@ struct InfoLine: View {
 
 struct MotifStage: View {
     let style: ClubGoalStyle
-    let p: Double     // 0…1 sur la durée du motif
-    let t: Double
+    let p: CGFloat     // 0…1 sur la durée du motif
+    let t: CGFloat
 
     var body: some View {
         GeometryReader { g in
@@ -437,285 +437,357 @@ struct MotifStage: View {
 
     @ViewBuilder private func motif(w: CGFloat, h: CGFloat) -> some View {
         switch style.motif {
-        case .cannon:
-            // Le canon recule en tirant, le boulet traverse l'écran, fumée et éclair.
-            let fire = Ease.seg(p, 0.12, 0.2)
-            let recoil = sin(.pi * Ease.seg(p, 0.12, 0.35)) * 10
-            let ball = Ease.outCubic(Ease.seg(p, 0.15, 0.6))
-            ZStack {
-                CannonShape().fill(LinearGradient(colors: [Color(white: 0.85), Color(white: 0.45)], startPoint: .top, endPoint: .bottom))
-                    .frame(width: 120, height: 70)
-                    .rotationEffect(.degrees(-14))
-                    .position(x: w * 0.2 - recoil, y: h * 0.62)
-                    .scaleEffect(Ease.outBack(Ease.seg(p, 0, 0.12)))
-                Circle().fill(Color(white: 0.15)).frame(width: 22, height: 22)
-                    .position(x: w * 0.3 + (w * 0.85) * ball, y: h * 0.48 - 70 * sin(.pi * ball) * 0.6)
-                    .opacity(ball > 0 && ball < 1 ? 1 : 0)
-                ForEach(0..<4, id: \.self) { i in
-                    let sp = Ease.seg(p, 0.16 + Double(i) * 0.04, 0.6 + Double(i) * 0.05)
-                    Circle().fill(Color.white.opacity(0.55 * (1 - sp)))
-                        .frame(width: 20 + 50 * sp, height: 20 + 50 * sp)
-                        .blur(radius: 6)
-                        .position(x: w * 0.32 + CGFloat(i) * 12 + 30 * sp, y: h * 0.45 - CGFloat(i) * 6 - 20 * sp)
-                }
-                Image(systemName: "sparkle").font(.system(size: 54, weight: .black)).foregroundStyle(.yellow)
-                    .position(x: w * 0.33, y: h * 0.47)
-                    .scaleEffect(fire > 0 && fire < 1 ? 1 + fire : 0.01)
-                    .opacity(1 - fire)
-            }
-        case .claws:
-            ZStack {
-                ForEach(0..<3, id: \.self) { i in
-                    let q = Ease.outCubic(Ease.seg(p, Double(i) * 0.08, 0.3 + Double(i) * 0.08))
-                    Capsule().fill(LinearGradient(colors: [sec, pri, .clear], startPoint: .top, endPoint: .bottom))
-                        .frame(width: 10, height: 150 * q)
-                        .rotationEffect(.degrees(28))
-                        .position(x: w * 0.38 + CGFloat(i) * 36, y: h * 0.5)
-                        .shadow(color: sec, radius: 8)
-                }
-            }
-        case .cherries:
-            ZStack {
-                ForEach(0..<2, id: \.self) { i in
-                    let q = Ease.outBounce(Ease.seg(p, Double(i) * 0.1, 0.5 + Double(i) * 0.1))
-                    VStack(spacing: -4) {
-                        Capsule().fill(Color.green).frame(width: 4, height: 34).rotationEffect(.degrees(i == 0 ? 20 : -20))
-                        Circle().fill(RadialGradient(colors: [Color(red: 1, green: 0.35, blue: 0.35), Color(red: 0.7, green: 0, blue: 0.05)], center: .topLeading, startRadius: 2, endRadius: 40))
-                            .frame(width: 52, height: 52)
-                    }
-                    .position(x: w * 0.42 + CGFloat(i) * 60, y: -40 + (h * 0.62 + 40) * q)
-                }
-            }
-        case .bees:
-            ZStack {
-                ForEach(0..<5, id: \.self) { i in
-                    let a = t * 3.2 + Double(i) * 1.26
-                    let r = 70 * Ease.outCubic(Ease.seg(p, 0, 0.3))
-                    BeeView().frame(width: 34, height: 26)
-                        .rotationEffect(.degrees(cos(a) * 25))
-                        .position(x: w / 2 + cos(a) * r * 1.6, y: h / 2 + sin(a * 2) * r * 0.45)
-                }
-            }
-        case .gull:
-            let q = Ease.inOutCubic(Ease.seg(p, 0, 0.8))
-            ZStack {
-                ForEach(0..<4, id: \.self) { k in
-                    let qq = max(0, q - Double(k) * 0.05)
-                    sym("bird.fill", 64, .white)
-                        .opacity(k == 0 ? 1 : 0.25 / Double(k))
-                        .scaleEffect(x: -1, y: 1 + 0.15 * sin(t * 18))
-                        .position(x: -40 + (w + 80) * qq, y: h * 0.55 - sin(.pi * qq) * 50)
-                }
-            }
-        case .eagle:
-            let q = Ease.outBack(Ease.seg(p, 0, 0.45))
-            sym("bird.fill", 110, sec)
-                .scaleEffect(x: -q, y: q * (1 + 0.12 * sin(t * 14)))
-                .position(x: w / 2, y: h * 0.95 - h * 0.45 * q)
-        case .tower:
-            let q = Ease.outCubic(Ease.seg(p, 0, 0.45))
-            ZStack {
-                ForEach(0..<8, id: \.self) { i in
-                    Capsule().fill(sec.opacity(0.25)).frame(width: 4, height: 220)
-                        .rotationEffect(.degrees(Double(i) * 22.5 + t * 20))
-                }
-                .opacity(q)
-                TowerShape().fill(LinearGradient(colors: [.white, sec.opacity(0.8)], startPoint: .top, endPoint: .bottom))
-                    .frame(width: 70, height: 120)
-                    .offset(y: 140 * (1 - q))
-            }
-            .position(x: w / 2, y: h / 2)
-            .clipped()
-        case .cottage:
-            let q = Ease.outBack(Ease.seg(p, 0, 0.35))
-            ZStack {
-                sym("house.fill", 96, .white).scaleEffect(q)
-                HStack(spacing: 14) {
-                    ForEach(0..<2, id: \.self) { i in
-                        RoundedRectangle(cornerRadius: 2).fill(Color.yellow.opacity(Ease.seg(p, 0.3 + Double(i) * 0.08, 0.45 + Double(i) * 0.08)))
-                            .frame(width: 14, height: 14)
-                    }
-                }
-                .offset(y: 16)
-            }
-            .position(x: w / 2, y: h / 2)
-        case .rose:
-            let q = Ease.outBack(Ease.seg(p, 0, 0.45))
-            ZStack {
-                ForEach(0..<5, id: \.self) { i in
-                    Ellipse().fill(LinearGradient(colors: [.white, sec], startPoint: .top, endPoint: .bottom))
-                        .frame(width: 44, height: 64)
-                        .offset(y: -30)
-                        .rotationEffect(.degrees(Double(i) * 72))
-                }
-                Circle().fill(sec).frame(width: 30, height: 30)
-            }
-            .scaleEffect(q)
-            .rotationEffect(.degrees(120 * Ease.outCubic(p)))
-            .position(x: w / 2, y: h / 2)
-        case .flames:
-            ZStack {
-                ForEach(0..<7, id: \.self) { i in
-                    let q = Ease.outCubic(Ease.seg(p, Double(i) * 0.04, 0.35 + Double(i) * 0.04))
-                    Image(systemName: "flame.fill")
-                        .font(.system(size: 54 + CGFloat(i % 3) * 14))
-                        .foregroundStyle(LinearGradient(colors: [.yellow, .orange, pri], startPoint: .top, endPoint: .bottom))
-                        .scaleEffect(x: 1, y: q * (1 + 0.12 * sin(t * 16 + Double(i))), anchor: .bottom)
-                        .position(x: w * 0.12 + CGFloat(i) * w * 0.13, y: h * 0.62)
-                }
-            }
-        case .ship:
-            let q = Ease.outCubic(Ease.seg(p, 0, 0.55))
-            ZStack {
-                ForEach(0..<3, id: \.self) { i in
-                    WaveShape(phase: t * 3 + Double(i)).stroke(sec.opacity(0.5 - Double(i) * 0.12), lineWidth: 3)
-                        .frame(height: 30).offset(y: 40 + CGFloat(i) * 10)
-                }
-                sym("sailboat.fill", 84, .white)
-                    .rotationEffect(.degrees(sin(t * 4) * 6))
-                    .offset(x: -w * 0.6 * (1 - q), y: -4)
-            }
-            .position(x: w / 2, y: h / 2)
-        case .trident:
-            let q = Ease.outBack(Ease.seg(p, 0, 0.4))
-            ZStack {
-                ForEach(0..<2, id: \.self) { i in
-                    Image(systemName: "flame.fill").font(.system(size: 60))
-                        .foregroundStyle(LinearGradient(colors: [sec, pri], startPoint: .top, endPoint: .bottom))
-                        .scaleEffect(y: 1 + 0.15 * sin(t * 15 + Double(i)), anchor: .bottom)
-                        .offset(x: i == 0 ? -80 : 80, y: 20)
-                        .opacity(Ease.seg(p, 0.2, 0.4))
-                }
-                TridentShape().fill(LinearGradient(colors: [sec, Color(red: 0.8, green: 0.6, blue: 0.1)], startPoint: .top, endPoint: .bottom))
-                    .frame(width: 70, height: 140)
-                    .offset(y: 150 * (1 - q))
-                    .shadow(color: sec, radius: 12)
-            }
-            .position(x: w / 2, y: h / 2)
-        case .magpie:
-            let q = Ease.inOutCubic(Ease.seg(p, 0, 0.7))
-            ZStack {
-                HStack(spacing: 0) {
-                    ForEach(0..<9, id: \.self) { i in Rectangle().fill(i % 2 == 0 ? Color.white.opacity(0.18) : Color.black.opacity(0.2)) }
-                }
-                .opacity(Ease.seg(p, 0, 0.2) * (1 - Ease.seg(p, 0.7, 0.9)))
-                sym("bird.fill", 70, .white)
-                    .overlay(Image(systemName: "bird.fill").font(.system(size: 70, weight: .bold)).foregroundStyle(.black).mask(Rectangle().frame(width: 70, height: 36).offset(y: 18)))
-                    .position(x: w + 40 - (w + 80) * q, y: h * 0.45 + sin(.pi * 2 * q) * 20)
-            }
-        case .tree:
-            let q = Ease.outBack(Ease.seg(p, 0, 0.45), 1.3)
-            ZStack {
-                sym("tree.fill", 110, .white).scaleEffect(q, anchor: .bottom)
-                ForEach(0..<10, id: \.self) { i in
-                    let lp = Ease.seg(p, 0.3 + Double(i) * 0.03, 0.9)
-                    Circle().fill(Color.green.opacity(0.8 * (1 - lp))).frame(width: 8, height: 8)
-                        .offset(x: CGFloat(i - 5) * 14 + CGFloat(sin(Double(i) * 1.7)) * 20 * lp, y: -40 + 90 * lp)
-                }
-            }
-            .position(x: w / 2, y: h * 0.55)
-        case .cats:
-            let q = Ease.outCubic(Ease.seg(p, 0, 0.45))
-            ZStack {
-                sym("cat.fill", 90, .white)
-                HStack(spacing: 14) {
-                    ForEach(0..<2, id: \.self) { _ in Capsule().fill(Color.yellow).frame(width: 7, height: 10).shadow(color: .yellow, radius: 6) }
-                }
-                .offset(x: 6, y: -14)
-                .opacity(Ease.seg(p, 0.35, 0.5))
-            }
-            .position(x: -60 + (w / 2 + 60) * q, y: h * 0.55 - sin(.pi * q) * 60)
-        case .hammers:
-            let strike = Ease.outBack(Ease.seg(p, 0, 0.3), 2.5)
-            let spark = Ease.seg(p, 0.28, 0.7)
-            ZStack {
-                sym("hammer.fill", 80, .white).rotationEffect(.degrees(-70 + 50 * strike)).offset(x: -34)
-                sym("hammer.fill", 80, sec).scaleEffect(x: -1, y: 1).rotationEffect(.degrees(70 - 50 * strike)).offset(x: 34)
-                ForEach(0..<12, id: \.self) { i in
-                    let a = Double(i) / 12 * 2 * .pi
-                    Circle().fill(Color.yellow).frame(width: 6, height: 6)
-                        .offset(x: cos(a) * 90 * spark, y: -30 + sin(a) * 60 * spark)
-                        .opacity(spark > 0 ? 1 - spark : 0)
-                }
-            }
-            .position(x: w / 2, y: h / 2)
-        case .moon:
-            let q = Ease.outCubic(Ease.seg(p, 0, 0.45))
-            ZStack {
-                ForEach(0..<3, id: \.self) { i in
-                    let rp = Ease.seg(p, 0.3 + Double(i) * 0.12, 0.8 + Double(i) * 0.08)
-                    Circle().stroke(pri.opacity(1 - rp), lineWidth: 3).frame(width: 80 + 160 * rp, height: 80 + 160 * rp)
-                }
-                sym("moon.fill", 90, pri).offset(y: 120 * (1 - q))
-            }
-            .position(x: w / 2, y: h / 2)
-        case .crown:
-            let q = Ease.outBounce(Ease.seg(p, 0, 0.5))
-            ZStack {
-                sym("crown.fill", 92, sec).offset(y: -140 + 140 * q)
-                ForEach(0..<6, id: \.self) { i in
-                    Image(systemName: "sparkle").font(.system(size: 18)).foregroundStyle(.white)
-                        .offset(x: cos(Double(i)) * 90, y: sin(Double(i) * 1.3) * 50)
-                        .scaleEffect(Ease.seg(p, 0.45, 0.6) * (0.7 + 0.3 * sin(t * 10 + Double(i))))
-                }
-            }
-            .position(x: w / 2, y: h / 2)
-        case .bolt:
-            ZStack {
-                ForEach(0..<2, id: \.self) { i in
-                    let q = Ease.seg(p, 0.05 + Double(i) * 0.22, 0.2 + Double(i) * 0.22)
-                    sym("bolt.fill", 100, i == 0 ? .yellow : sec)
-                        .scaleEffect(q > 0 ? 1 : 0.01)
-                        .opacity(q > 0 ? 1 - Ease.seg(p, 0.6 + Double(i) * 0.1, 0.85) : 0)
-                        .offset(x: i == 0 ? -50 : 50)
-                }
-                Color.white.opacity(0.35 * (1 - Ease.seg(p, 0.05, 0.16)) * (p > 0.05 ? 1 : 0)).blendMode(.plusLighter)
-            }
-            .position(x: w / 2, y: h / 2)
-        case .cockerel:
-            let bounce = Ease.outBounce(Ease.seg(p, 0, 0.5))
-            VStack(spacing: -6) {
-                sym("bird.fill", 64, .white).scaleEffect(x: -1, y: 1)
-                Circle().fill(.white).frame(width: 40, height: 40).overlay(Circle().stroke(Color.black.opacity(0.3), lineWidth: 2))
-            }
-            .position(x: w / 2, y: -60 + (h * 0.55 + 60) * bounce)
-        case .fox:
-            ZStack {
-                ForEach(0..<5, id: \.self) { i in
-                    let q = Ease.seg(p, Double(i) * 0.09, 0.15 + Double(i) * 0.09)
-                    sym("pawprint.fill", 34, i % 2 == 0 ? sec : .white)
-                        .rotationEffect(.degrees(90))
-                        .scaleEffect(Ease.outBack(q))
-                        .position(x: w * 0.15 + CGFloat(i) * w * 0.17, y: h * 0.5 + (i % 2 == 0 ? -18 : 18))
-                }
-            }
-        case .horse:
-            let q = Ease.inOutCubic(Ease.seg(p, 0, 0.75))
-            sym("figure.equestrian.sports", 88, .white)
-                .offset(y: -abs(sin(t * 9)) * 10)
-                .position(x: -60 + (w + 120) * q, y: h * 0.55)
-        case .halo:
-            let q = Ease.outBack(Ease.seg(p, 0, 0.4))
-            ZStack {
-                Ellipse().stroke(LinearGradient(colors: [.yellow, .white], startPoint: .leading, endPoint: .trailing), lineWidth: 8)
-                    .frame(width: 150 * q, height: 40 * q)
-                    .rotation3DEffect(.degrees(t * 90), axis: (x: 0, y: 1, z: 0))
-                    .shadow(color: .yellow, radius: 14)
-                sym("sparkles", 50, .white).offset(y: 50).opacity(Ease.seg(p, 0.3, 0.45))
-            }
-            .position(x: w / 2, y: h / 2)
-        case .generic:
-            ZStack {
-                ForEach(0..<14, id: \.self) { i in
-                    let a = Double(i) / 14 * 2 * .pi
-                    let q = Ease.outCubic(Ease.seg(p, 0, 0.6))
-                    Image(systemName: "sparkle").font(.system(size: 16)).foregroundStyle(i % 2 == 0 ? pri : sec)
-                        .offset(x: cos(a) * 120 * q, y: sin(a) * 60 * q)
-                        .opacity(1 - Ease.seg(p, 0.5, 0.9))
-                }
-            }
-            .position(x: w / 2, y: h / 2)
+        case .cannon: m_cannon(w: w, h: h)
+        case .claws: m_claws(w: w, h: h)
+        case .cherries: m_cherries(w: w, h: h)
+        case .bees: m_bees(w: w, h: h)
+        case .gull: m_gull(w: w, h: h)
+        case .eagle: m_eagle(w: w, h: h)
+        case .tower: m_tower(w: w, h: h)
+        case .cottage: m_cottage(w: w, h: h)
+        case .rose: m_rose(w: w, h: h)
+        case .flames: m_flames(w: w, h: h)
+        case .ship: m_ship(w: w, h: h)
+        case .trident: m_trident(w: w, h: h)
+        case .magpie: m_magpie(w: w, h: h)
+        case .tree: m_tree(w: w, h: h)
+        case .cats: m_cats(w: w, h: h)
+        case .hammers: m_hammers(w: w, h: h)
+        case .moon: m_moon(w: w, h: h)
+        case .crown: m_crown(w: w, h: h)
+        case .bolt: m_bolt(w: w, h: h)
+        case .cockerel: m_cockerel(w: w, h: h)
+        case .fox: m_fox(w: w, h: h)
+        case .horse: m_horse(w: w, h: h)
+        case .halo: m_halo(w: w, h: h)
+        case .generic: m_generic(w: w, h: h)
         }
+    }
+
+    @ViewBuilder private func m_cannon(w: CGFloat, h: CGFloat) -> some View {
+        // Le canon recule en tirant, le boulet traverse l'écran, fumée et éclair.
+        let fire = Ease.seg(p, 0.12, 0.2)
+        let recoil = sin(.pi * Ease.seg(p, 0.12, 0.35)) * 10
+        let ball = Ease.outCubic(Ease.seg(p, 0.15, 0.6))
+        ZStack {
+            CannonShape().fill(LinearGradient(colors: [Color(white: 0.85), Color(white: 0.45)], startPoint: .top, endPoint: .bottom))
+                .frame(width: 120, height: 70)
+                .rotationEffect(.degrees(-14))
+                .position(x: w * 0.2 - recoil, y: h * 0.62)
+                .scaleEffect(Ease.outBack(Ease.seg(p, 0, 0.12)))
+            Circle().fill(Color(white: 0.15)).frame(width: 22, height: 22)
+                .position(x: w * 0.3 + (w * 0.85) * ball, y: h * 0.48 - 70 * sin(.pi * ball) * 0.6)
+                .opacity(ball > 0 && ball < 1 ? 1 : 0)
+            ForEach(0..<4, id: \.self) { i in
+                let sp = Ease.seg(p, 0.16 + CGFloat(i) * 0.04, 0.6 + CGFloat(i) * 0.05)
+                Circle().fill(Color.white.opacity(0.55 * (1 - sp)))
+                    .frame(width: 20 + 50 * sp, height: 20 + 50 * sp)
+                    .blur(radius: 6)
+                    .position(x: w * 0.32 + CGFloat(i) * 12 + 30 * sp, y: h * 0.45 - CGFloat(i) * 6 - 20 * sp)
+            }
+            Image(systemName: "sparkle").font(.system(size: 54, weight: .black)).foregroundStyle(.yellow)
+                .position(x: w * 0.33, y: h * 0.47)
+                .scaleEffect(fire > 0 && fire < 1 ? 1 + fire : 0.01)
+                .opacity(1 - fire)
+        }
+    }
+
+    @ViewBuilder private func m_claws(w: CGFloat, h: CGFloat) -> some View {
+        ZStack {
+            ForEach(0..<3, id: \.self) { i in
+                let q = Ease.outCubic(Ease.seg(p, CGFloat(i) * 0.08, 0.3 + CGFloat(i) * 0.08))
+                Capsule().fill(LinearGradient(colors: [sec, pri, .clear], startPoint: .top, endPoint: .bottom))
+                    .frame(width: 10, height: 150 * q)
+                    .rotationEffect(.degrees(28))
+                    .position(x: w * 0.38 + CGFloat(i) * 36, y: h * 0.5)
+                    .shadow(color: sec, radius: 8)
+            }
+        }
+    }
+
+    @ViewBuilder private func m_cherries(w: CGFloat, h: CGFloat) -> some View {
+        ZStack {
+            ForEach(0..<2, id: \.self) { i in
+                let q = Ease.outBounce(Ease.seg(p, CGFloat(i) * 0.1, 0.5 + CGFloat(i) * 0.1))
+                VStack(spacing: -4) {
+                    Capsule().fill(Color.green).frame(width: 4, height: 34).rotationEffect(.degrees(i == 0 ? 20 : -20))
+                    Circle().fill(RadialGradient(colors: [Color(red: 1, green: 0.35, blue: 0.35), Color(red: 0.7, green: 0, blue: 0.05)], center: .topLeading, startRadius: 2, endRadius: 40))
+                        .frame(width: 52, height: 52)
+                }
+                .position(x: w * 0.42 + CGFloat(i) * 60, y: -40 + (h * 0.62 + 40) * q)
+            }
+        }
+    }
+
+    @ViewBuilder private func m_bees(w: CGFloat, h: CGFloat) -> some View {
+        ZStack {
+            ForEach(0..<5, id: \.self) { i in
+                let a = t * 3.2 + CGFloat(i) * 1.26
+                let r = 70 * Ease.outCubic(Ease.seg(p, 0, 0.3))
+                BeeView().frame(width: 34, height: 26)
+                    .rotationEffect(.degrees(cos(a) * 25))
+                    .position(x: w / 2 + cos(a) * r * 1.6, y: h / 2 + sin(a * 2) * r * 0.45)
+            }
+        }
+    }
+
+    @ViewBuilder private func m_gull(w: CGFloat, h: CGFloat) -> some View {
+        let q = Ease.inOutCubic(Ease.seg(p, 0, 0.8))
+        ZStack {
+            ForEach(0..<4, id: \.self) { k in
+                let qq = max(0, q - CGFloat(k) * 0.05)
+                sym("bird.fill", 64, .white)
+                    .opacity(k == 0 ? 1 : 0.25 / CGFloat(k))
+                    .scaleEffect(x: -1, y: 1 + 0.15 * sin(t * 18))
+                    .position(x: -40 + (w + 80) * qq, y: h * 0.55 - sin(.pi * qq) * 50)
+            }
+        }
+    }
+
+    @ViewBuilder private func m_eagle(w: CGFloat, h: CGFloat) -> some View {
+        let q = Ease.outBack(Ease.seg(p, 0, 0.45))
+        sym("bird.fill", 110, sec)
+            .scaleEffect(x: -q, y: q * (1 + 0.12 * sin(t * 14)))
+            .position(x: w / 2, y: h * 0.95 - h * 0.45 * q)
+    }
+
+    @ViewBuilder private func m_tower(w: CGFloat, h: CGFloat) -> some View {
+        let q = Ease.outCubic(Ease.seg(p, 0, 0.45))
+        ZStack {
+            ForEach(0..<8, id: \.self) { i in
+                Capsule().fill(sec.opacity(0.25)).frame(width: 4, height: 220)
+                    .rotationEffect(.degrees(CGFloat(i) * 22.5 + t * 20))
+            }
+            .opacity(q)
+            TowerShape().fill(LinearGradient(colors: [.white, sec.opacity(0.8)], startPoint: .top, endPoint: .bottom))
+                .frame(width: 70, height: 120)
+                .offset(y: 140 * (1 - q))
+        }
+        .position(x: w / 2, y: h / 2)
+        .clipped()
+    }
+
+    @ViewBuilder private func m_cottage(w: CGFloat, h: CGFloat) -> some View {
+        let q = Ease.outBack(Ease.seg(p, 0, 0.35))
+        ZStack {
+            sym("house.fill", 96, .white).scaleEffect(q)
+            HStack(spacing: 14) {
+                ForEach(0..<2, id: \.self) { i in
+                    RoundedRectangle(cornerRadius: 2).fill(Color.yellow.opacity(Ease.seg(p, 0.3 + CGFloat(i) * 0.08, 0.45 + CGFloat(i) * 0.08)))
+                        .frame(width: 14, height: 14)
+                }
+            }
+            .offset(y: 16)
+        }
+        .position(x: w / 2, y: h / 2)
+    }
+
+    @ViewBuilder private func m_rose(w: CGFloat, h: CGFloat) -> some View {
+        let q = Ease.outBack(Ease.seg(p, 0, 0.45))
+        ZStack {
+            ForEach(0..<5, id: \.self) { i in
+                Ellipse().fill(LinearGradient(colors: [.white, sec], startPoint: .top, endPoint: .bottom))
+                    .frame(width: 44, height: 64)
+                    .offset(y: -30)
+                    .rotationEffect(.degrees(CGFloat(i) * 72))
+            }
+            Circle().fill(sec).frame(width: 30, height: 30)
+        }
+        .scaleEffect(q)
+        .rotationEffect(.degrees(120 * Ease.outCubic(p)))
+        .position(x: w / 2, y: h / 2)
+    }
+
+    @ViewBuilder private func m_flames(w: CGFloat, h: CGFloat) -> some View {
+        ZStack {
+            ForEach(0..<7, id: \.self) { i in
+                let q = Ease.outCubic(Ease.seg(p, CGFloat(i) * 0.04, 0.35 + CGFloat(i) * 0.04))
+                Image(systemName: "flame.fill")
+                    .font(.system(size: 54 + CGFloat(i % 3) * 14))
+                    .foregroundStyle(LinearGradient(colors: [.yellow, .orange, pri], startPoint: .top, endPoint: .bottom))
+                    .scaleEffect(x: 1, y: q * (1 + 0.12 * sin(t * 16 + CGFloat(i))), anchor: .bottom)
+                    .position(x: w * 0.12 + CGFloat(i) * w * 0.13, y: h * 0.62)
+            }
+        }
+    }
+
+    @ViewBuilder private func m_ship(w: CGFloat, h: CGFloat) -> some View {
+        let q = Ease.outCubic(Ease.seg(p, 0, 0.55))
+        ZStack {
+            ForEach(0..<3, id: \.self) { i in
+                WaveShape(phase: t * 3 + CGFloat(i)).stroke(sec.opacity(0.5 - CGFloat(i) * 0.12), lineWidth: 3)
+                    .frame(height: 30).offset(y: 40 + CGFloat(i) * 10)
+            }
+            sym("sailboat.fill", 84, .white)
+                .rotationEffect(.degrees(sin(t * 4) * 6))
+                .offset(x: -w * 0.6 * (1 - q), y: -4)
+        }
+        .position(x: w / 2, y: h / 2)
+    }
+
+    @ViewBuilder private func m_trident(w: CGFloat, h: CGFloat) -> some View {
+        let q = Ease.outBack(Ease.seg(p, 0, 0.4))
+        ZStack {
+            ForEach(0..<2, id: \.self) { i in
+                Image(systemName: "flame.fill").font(.system(size: 60))
+                    .foregroundStyle(LinearGradient(colors: [sec, pri], startPoint: .top, endPoint: .bottom))
+                    .scaleEffect(y: 1 + 0.15 * sin(t * 15 + CGFloat(i)), anchor: .bottom)
+                    .offset(x: i == 0 ? -80 : 80, y: 20)
+                    .opacity(Ease.seg(p, 0.2, 0.4))
+            }
+            TridentShape().fill(LinearGradient(colors: [sec, Color(red: 0.8, green: 0.6, blue: 0.1)], startPoint: .top, endPoint: .bottom))
+                .frame(width: 70, height: 140)
+                .offset(y: 150 * (1 - q))
+                .shadow(color: sec, radius: 12)
+        }
+        .position(x: w / 2, y: h / 2)
+    }
+
+    @ViewBuilder private func m_magpie(w: CGFloat, h: CGFloat) -> some View {
+        let q = Ease.inOutCubic(Ease.seg(p, 0, 0.7))
+        ZStack {
+            HStack(spacing: 0) {
+                ForEach(0..<9, id: \.self) { i in Rectangle().fill(i % 2 == 0 ? Color.white.opacity(0.18) : Color.black.opacity(0.2)) }
+            }
+            .opacity(Ease.seg(p, 0, 0.2) * (1 - Ease.seg(p, 0.7, 0.9)))
+            sym("bird.fill", 70, .white)
+                .overlay(Image(systemName: "bird.fill").font(.system(size: 70, weight: .bold)).foregroundStyle(.black).mask(Rectangle().frame(width: 70, height: 36).offset(y: 18)))
+                .position(x: w + 40 - (w + 80) * q, y: h * 0.45 + sin(.pi * 2 * q) * 20)
+        }
+    }
+
+    @ViewBuilder private func m_tree(w: CGFloat, h: CGFloat) -> some View {
+        let q = Ease.outBack(Ease.seg(p, 0, 0.45), 1.3)
+        ZStack {
+            sym("tree.fill", 110, .white).scaleEffect(q, anchor: .bottom)
+            ForEach(0..<10, id: \.self) { i in
+                let lp = Ease.seg(p, 0.3 + CGFloat(i) * 0.03, 0.9)
+                Circle().fill(Color.green.opacity(0.8 * (1 - lp))).frame(width: 8, height: 8)
+                    .offset(x: CGFloat(i - 5) * 14 + CGFloat(sin(CGFloat(i) * 1.7)) * 20 * lp, y: -40 + 90 * lp)
+            }
+        }
+        .position(x: w / 2, y: h * 0.55)
+    }
+
+    @ViewBuilder private func m_cats(w: CGFloat, h: CGFloat) -> some View {
+        let q = Ease.outCubic(Ease.seg(p, 0, 0.45))
+        ZStack {
+            sym("cat.fill", 90, .white)
+            HStack(spacing: 14) {
+                ForEach(0..<2, id: \.self) { _ in Capsule().fill(Color.yellow).frame(width: 7, height: 10).shadow(color: .yellow, radius: 6) }
+            }
+            .offset(x: 6, y: -14)
+            .opacity(Ease.seg(p, 0.35, 0.5))
+        }
+        .position(x: -60 + (w / 2 + 60) * q, y: h * 0.55 - sin(.pi * q) * 60)
+    }
+
+    @ViewBuilder private func m_hammers(w: CGFloat, h: CGFloat) -> some View {
+        let strike = Ease.outBack(Ease.seg(p, 0, 0.3), 2.5)
+        let spark = Ease.seg(p, 0.28, 0.7)
+        ZStack {
+            sym("hammer.fill", 80, .white).rotationEffect(.degrees(-70 + 50 * strike)).offset(x: -34)
+            sym("hammer.fill", 80, sec).scaleEffect(x: -1, y: 1).rotationEffect(.degrees(70 - 50 * strike)).offset(x: 34)
+            ForEach(0..<12, id: \.self) { i in
+                let a = CGFloat(i) / 12 * 2 * .pi
+                Circle().fill(Color.yellow).frame(width: 6, height: 6)
+                    .offset(x: cos(a) * 90 * spark, y: -30 + sin(a) * 60 * spark)
+                    .opacity(spark > 0 ? 1 - spark : 0)
+            }
+        }
+        .position(x: w / 2, y: h / 2)
+    }
+
+    @ViewBuilder private func m_moon(w: CGFloat, h: CGFloat) -> some View {
+        let q = Ease.outCubic(Ease.seg(p, 0, 0.45))
+        ZStack {
+            ForEach(0..<3, id: \.self) { i in
+                let rp = Ease.seg(p, 0.3 + CGFloat(i) * 0.12, 0.8 + CGFloat(i) * 0.08)
+                Circle().stroke(pri.opacity(1 - rp), lineWidth: 3).frame(width: 80 + 160 * rp, height: 80 + 160 * rp)
+            }
+            sym("moon.fill", 90, pri).offset(y: 120 * (1 - q))
+        }
+        .position(x: w / 2, y: h / 2)
+    }
+
+    @ViewBuilder private func m_crown(w: CGFloat, h: CGFloat) -> some View {
+        let q = Ease.outBounce(Ease.seg(p, 0, 0.5))
+        ZStack {
+            sym("crown.fill", 92, sec).offset(y: -140 + 140 * q)
+            ForEach(0..<6, id: \.self) { i in
+                Image(systemName: "sparkle").font(.system(size: 18)).foregroundStyle(.white)
+                    .offset(x: cos(CGFloat(i)) * 90, y: sin(CGFloat(i) * 1.3) * 50)
+                    .scaleEffect(Ease.seg(p, 0.45, 0.6) * (0.7 + 0.3 * sin(t * 10 + CGFloat(i))))
+            }
+        }
+        .position(x: w / 2, y: h / 2)
+    }
+
+    @ViewBuilder private func m_bolt(w: CGFloat, h: CGFloat) -> some View {
+        ZStack {
+            ForEach(0..<2, id: \.self) { i in
+                let q = Ease.seg(p, 0.05 + CGFloat(i) * 0.22, 0.2 + CGFloat(i) * 0.22)
+                sym("bolt.fill", 100, i == 0 ? .yellow : sec)
+                    .scaleEffect(q > 0 ? 1 : 0.01)
+                    .opacity(q > 0 ? 1 - Ease.seg(p, 0.6 + CGFloat(i) * 0.1, 0.85) : 0)
+                    .offset(x: i == 0 ? -50 : 50)
+            }
+            Color.white.opacity(0.35 * (1 - Ease.seg(p, 0.05, 0.16)) * (p > 0.05 ? 1 : 0)).blendMode(.plusLighter)
+        }
+        .position(x: w / 2, y: h / 2)
+    }
+
+    @ViewBuilder private func m_cockerel(w: CGFloat, h: CGFloat) -> some View {
+        let bounce = Ease.outBounce(Ease.seg(p, 0, 0.5))
+        VStack(spacing: -6) {
+            sym("bird.fill", 64, .white).scaleEffect(x: -1, y: 1)
+            Circle().fill(.white).frame(width: 40, height: 40).overlay(Circle().stroke(Color.black.opacity(0.3), lineWidth: 2))
+        }
+        .position(x: w / 2, y: -60 + (h * 0.55 + 60) * bounce)
+    }
+
+    @ViewBuilder private func m_fox(w: CGFloat, h: CGFloat) -> some View {
+        ZStack {
+            ForEach(0..<5, id: \.self) { i in
+                let q = Ease.seg(p, CGFloat(i) * 0.09, 0.15 + CGFloat(i) * 0.09)
+                sym("pawprint.fill", 34, i % 2 == 0 ? sec : .white)
+                    .rotationEffect(.degrees(90))
+                    .scaleEffect(Ease.outBack(q))
+                    .position(x: w * 0.15 + CGFloat(i) * w * 0.17, y: h * 0.5 + (i % 2 == 0 ? -18 : 18))
+            }
+        }
+    }
+
+    @ViewBuilder private func m_horse(w: CGFloat, h: CGFloat) -> some View {
+        let q = Ease.inOutCubic(Ease.seg(p, 0, 0.75))
+        sym("figure.equestrian.sports", 88, .white)
+            .offset(y: -abs(sin(t * 9)) * 10)
+            .position(x: -60 + (w + 120) * q, y: h * 0.55)
+    }
+
+    @ViewBuilder private func m_halo(w: CGFloat, h: CGFloat) -> some View {
+        let q = Ease.outBack(Ease.seg(p, 0, 0.4))
+        ZStack {
+            Ellipse().stroke(LinearGradient(colors: [.yellow, .white], startPoint: .leading, endPoint: .trailing), lineWidth: 8)
+                .frame(width: 150 * q, height: 40 * q)
+                .rotation3DEffect(.degrees(t * 90), axis: (x: 0, y: 1, z: 0))
+                .shadow(color: .yellow, radius: 14)
+            sym("sparkles", 50, .white).offset(y: 50).opacity(Ease.seg(p, 0.3, 0.45))
+        }
+        .position(x: w / 2, y: h / 2)
+    }
+
+    @ViewBuilder private func m_generic(w: CGFloat, h: CGFloat) -> some View {
+        ZStack {
+            ForEach(0..<14, id: \.self) { i in
+                let a = CGFloat(i) / 14 * 2 * .pi
+                let q = Ease.outCubic(Ease.seg(p, 0, 0.6))
+                Image(systemName: "sparkle").font(.system(size: 16)).foregroundStyle(i % 2 == 0 ? pri : sec)
+                    .offset(x: cos(a) * 120 * q, y: sin(a) * 60 * q)
+                    .opacity(1 - Ease.seg(p, 0.5, 0.9))
+            }
+        }
+        .position(x: w / 2, y: h / 2)
     }
 }
 
@@ -759,13 +831,13 @@ struct TridentShape: Shape {
 }
 
 struct WaveShape: Shape {
-    var phase: Double
+    var phase: CGFloat
     func path(in r: CGRect) -> Path {
         var p = Path()
         p.move(to: CGPoint(x: r.minX, y: r.midY))
         var x = r.minX
         while x <= r.maxX {
-            p.addLine(to: CGPoint(x: x, y: r.midY + sin(Double(x) / 22 + phase) * r.height * 0.35))
+            p.addLine(to: CGPoint(x: x, y: r.midY + sin(CGFloat(x) / 22 + phase) * r.height * 0.35))
             x += 4
         }
         return p
@@ -791,10 +863,10 @@ struct BallBurst: View {
 
     var body: some View {
         TimelineView(.animation(paused: start == nil)) { tl in
-            let p = start.map { Ease.seg(tl.date.timeIntervalSince($0), 0, 0.7) } ?? 1
+            let p: CGFloat = start.map { Ease.seg(CGFloat(tl.date.timeIntervalSince($0)), 0, 0.7) } ?? 1
             ZStack {
                 ForEach(0..<16, id: \.self) { i in
-                    let a = Double(i) / 16 * 2 * .pi
+                    let a = CGFloat(i) / 16 * 2 * .pi
                     Circle().fill(i % 3 == 0 ? Color.white : color)
                         .frame(width: i % 2 == 0 ? 6 : 4, height: i % 2 == 0 ? 6 : 4)
                         .offset(x: cos(a) * 46 * Ease.outCubic(p), y: sin(a) * 46 * Ease.outCubic(p))
