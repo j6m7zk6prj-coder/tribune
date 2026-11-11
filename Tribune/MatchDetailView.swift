@@ -17,6 +17,7 @@ struct MatchDetailView: View {
     @Environment(AppStore.self) private var store
     @State private var match: Match
     @State private var summary: SummaryResponse?
+    @State private var extras: MatchExtras?
     @State private var loading = true
     @State private var tab: DetailTab = .fromLaunch
 
@@ -50,7 +51,7 @@ struct MatchDetailView: View {
 
                 Group {
                     switch tab {
-                    case .facts: FactsView(match: match, events: events, summary: summary, loading: loading, colors: colors)
+                    case .facts: FactsView(match: match, events: events, summary: summary, loading: loading, colors: colors, extras: extras)
                     case .lineups: LineupView(match: match, rosters: summary?.rosters ?? [], events: events)
                     case .stats: StatsView(match: match, teams: summary?.boxTeams ?? [])
                     case .table: StandingsTable(league: match.league, highlight: [match.home.id, match.away.id], highlightColors: [match.home.id: colors.0, match.away.id: colors.1], compact: false)
@@ -86,6 +87,10 @@ struct MatchDetailView: View {
             }
         }
         .task {
+            Task {
+                let x = await MatchExtras.load(match)
+                withAnimation(.smooth(duration: 0.4)) { extras = x }
+            }
             await load()
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(match.state == .live ? 30 : 120))
@@ -237,9 +242,15 @@ struct FactsView: View {
     let summary: SummaryResponse?
     let loading: Bool
     let colors: (Color, Color)
+    var extras: MatchExtras? = nil
 
     var body: some View {
         VStack(spacing: 14) {
+            if let x = extras, match.state == .pre {
+                ProbabilityCard(x: x, match: match, colors: colors)
+                FormCard(match: match, x: x)
+                HeadToHeadCard(match: match, x: x)
+            }
             let shown = events.filter { [EventKind]([.goal, .penaltyGoal, .ownGoal, .penaltyMissed, .yellow, .secondYellow, .red, .sub, .halftime]).contains($0.kind) }
             if !shown.isEmpty {
                 VStack(spacing: 0) {
@@ -267,10 +278,19 @@ struct FactsView: View {
                 if let a = summary?.attendance, a > 0 {
                     InfoRow(icon: "person.3", text: "\(a.formatted(.number.locale(fr))) spectateurs")
                 }
+                if let r = extras?.referee {
+                    InfoRow(icon: "flag.2.crossed", text: "Arbitre : \(r)")
+                }
             }
             .padding(16)
             .frame(maxWidth: .infinity, alignment: .leading)
             .glassSurface(cornerRadius: 22)
+
+            if let x = extras, match.state != .pre {
+                ProbabilityCard(x: x, match: match, colors: colors)
+                FormCard(match: match, x: x)
+                HeadToHeadCard(match: match, x: x)
+            }
         }
     }
 

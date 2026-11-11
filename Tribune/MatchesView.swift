@@ -209,6 +209,10 @@ struct DayPage: View {
         .task(id: TaskKey(enabled: store.enabled, active: isActive)) {
             guard isActive else { return }
             await load()
+            if isSelected, Launch.take("nextmatch"), let m = matches.first(where: { $0.state == .pre }) {
+                try? await Task.sleep(for: .milliseconds(300))
+                open(m)
+            }
             if isSelected, Launch.take("match"), let m = (matches.first { $0.state == .post } ?? matches.first) {
                 try? await Task.sleep(for: .milliseconds(300))
                 open(m)

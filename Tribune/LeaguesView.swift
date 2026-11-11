@@ -120,15 +120,30 @@ struct CompetitionView: View {
         return p
     }
 
+    private var theme: CompetitionTheme? { CompetitionTheme(competition.id) }
+    private var accent: Color { theme?.accent ?? competition.tint }
+    @State private var logoIn = false
+
     var body: some View {
         ScrollView {
             VStack(spacing: 16) {
                 VStack(spacing: 12) {
                     ZStack {
+                        if theme != nil {
+                            Circle()
+                                .strokeBorder(AngularGradient(colors: (theme?.streaks ?? []) + [theme?.streaks.first ?? .white], center: .center), lineWidth: 2.5)
+                                .frame(width: 100, height: 100)
+                                .blur(radius: 0.5)
+                                .rotationEffect(.degrees(logoIn ? 360 : 0))
+                                .animation(.linear(duration: 14).repeatForever(autoreverses: false), value: logoIn)
+                        }
                         Circle().fill(.white.opacity(0.92)).frame(width: 88, height: 88)
-                            .shadow(color: competition.tint.opacity(0.8), radius: 26)
+                            .shadow(color: accent.opacity(0.85), radius: logoIn ? 30 : 6)
                         LeagueLogo(league: competition.id, size: 58).environment(\.colorScheme, .light)
                     }
+                    .scaleEffect(logoIn ? 1 : 0.7)
+                    .opacity(logoIn ? 1 : 0)
+                    .onAppear { withAnimation(.spring(response: 0.7, dampingFraction: 0.7).delay(0.15)) { logoIn = true } }
                     Text(competition.name).font(.title.weight(.bold))
                     Menu {
                         Picker("Saison", selection: $season) {
@@ -143,7 +158,7 @@ struct CompetitionView: View {
                         .foregroundStyle(.primary)
                         .padding(.horizontal, 16)
                         .padding(.vertical, 9)
-                        .glassSurface(cornerRadius: 20, tint: competition.tint, interactive: true)
+                        .glassSurface(cornerRadius: 20, tint: accent, interactive: true)
                     }
                     .sensoryFeedback(.selection, trigger: season)
                 }
@@ -151,7 +166,7 @@ struct CompetitionView: View {
                 .padding(.top, 6)
 
                 if panes.count > 1 {
-                    GlassTabs(tabs: panes, selection: $section, tint: competition.tint) { $0.rawValue }
+                    GlassTabs(tabs: panes, selection: $section, tint: accent) { $0.rawValue }
                 }
 
                 Group {
@@ -169,7 +184,7 @@ struct CompetitionView: View {
                             if loadingLeaders { ProgressView().padding(.vertical, 60) }
                             else if leaders.isEmpty {
                                 ContentUnavailableView("Pas de statistiques", systemImage: "chart.bar", description: Text("ESPN ne fournit pas les meilleurs joueurs pour cette saison."))
-                            } else { LeadersView(categories: leaders, tint: competition.tint) }
+                            } else { LeadersView(categories: leaders, tint: accent) }
                         }
                     }
                 }
@@ -180,7 +195,11 @@ struct CompetitionView: View {
             .padding(.bottom, 40)
         }
         .scrollIndicators(.hidden)
-        .background { AmbientBackground(colors: [competition.tint, competition.tint.opacity(0.7), .brand], intensity: 1.1) }
+        .background {
+            if let theme { ThemedBackground(theme: theme) }
+            else { AmbientBackground(colors: [competition.tint, competition.tint.opacity(0.7), .brand], intensity: 1.1) }
+        }
+        .themedDark(theme != nil)
         .navigationTitle(competition.name)
         .navigationBarTitleDisplayMode(.inline)
         .task(id: season) { await load() }
@@ -202,7 +221,7 @@ struct CompetitionView: View {
                 Button { withAnimation(.smooth) { showAllResults = true } } label: {
                     Text("Afficher les \(results.count) résultats").font(.subheadline.weight(.semibold))
                         .padding(.horizontal, 18).padding(.vertical, 10)
-                        .glassSurface(cornerRadius: 20, tint: competition.tint, interactive: true)
+                        .glassSurface(cornerRadius: 20, tint: accent, interactive: true)
                 }
                 .buttonStyle(Pressable())
             }
@@ -264,5 +283,13 @@ struct DatedMatchList: View {
             dict[d, default: []].append(m)
         }
         return order.map { DayGroup(day: $0, matches: dict[$0]!) }
+    }
+}
+
+extension View {
+    /// Les pages à thème restent toujours en mode sombre.
+    @ViewBuilder func themedDark(_ on: Bool) -> some View {
+        if on { self.environment(\.colorScheme, .dark).toolbarColorScheme(.dark, for: .navigationBar) }
+        else { self }
     }
 }

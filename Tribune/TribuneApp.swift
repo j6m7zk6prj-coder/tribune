@@ -28,6 +28,7 @@ enum AppTab: String { case matches, leagues, following }
 
 struct RootView: View {
     @Environment(AppStore.self) private var store
+    @State private var splashDone = false
     @State private var tab: AppTab = AppTab(rawValue: Launch.value("-tab") ?? "") ?? .matches
 
     var body: some View {
@@ -43,6 +44,9 @@ struct RootView: View {
                 .tag(AppTab.following)
         }
         .minimizingTabBar()
+        .overlay {
+            if !splashDone { SplashView(done: $splashDone).transition(.opacity) }
+        }
         .task {
             store.shareWithWidgets()
             await store.refreshBadges()
