@@ -38,9 +38,9 @@ enum LeagueBadges {
         var out: [String: String] = [:]
         await withTaskGroup(of: (String, URL?).self) { g in
             var it = todo.makeIterator()
-            for _ in 0..<3 { if let job = it.next() { g.addTask { (job.key, await lookup(job.value)?.badge) } } }
+            for _ in 0..<3 { if let job = it.next() { g.addTask { (job.key, await LeagueBadges.lookup(job.value)?.badge) } } }
             for await (slug, url) in g {
-                if let job = it.next() { g.addTask { (job.key, await lookup(job.value)?.badge) } }
+                if let job = it.next() { g.addTask { (job.key, await LeagueBadges.lookup(job.value)?.badge) } }
                 if let url { out[slug + "#badge"] = url.absoluteString }
             }
         }
