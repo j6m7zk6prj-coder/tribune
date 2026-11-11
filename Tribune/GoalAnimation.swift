@@ -145,7 +145,8 @@ struct GoalOverlay: View {
             let alpha = inA * (1 - out)
 
             ZStack {
-                Color.black.opacity(0.62 * alpha)
+                Rectangle().fill(.ultraThinMaterial).opacity(alpha)
+                Color.black.opacity(0.78 * alpha)
                 RadialGradient(colors: [style.primary.opacity(0.55 * alpha), .clear], center: .center, startRadius: 10, endRadius: 420)
                     .scaleEffect(0.8 + 0.25 * Ease.outCubic(Ease.seg(t, 0.3, 1.2)))
 
@@ -544,7 +545,7 @@ struct MotifStage: View {
                 let qq = max(0, q - CGFloat(k) * 0.05)
                 sym("bird.fill", 64, .white)
                     .opacity(k == 0 ? 1 : 0.25 / CGFloat(k))
-                    .scaleEffect(x: -1, y: 1 + 0.15 * sin(t * 18))
+                    .scaleEffect(x: 1, y: 1 + 0.15 * sin(t * 18))
                     .position(x: -40 + (w + 80) * qq, y: h * 0.55 - sin(.pi * qq) * 50)
             }
         }
