@@ -7,12 +7,13 @@ struct LeaguesView: View {
 
     var body: some View {
         NavigationStack(path: $path) {
+            ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 12) {
                     ForEach(CompGroup.allCases) { g in
                         let comps = Competition.all.filter { $0.group == g && matches($0) }
                         if !comps.isEmpty {
-                            SectionTitle(text: g.rawValue)
+                            SectionTitle(text: g.rawValue).id(g.id)
                             LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
                                 ForEach(comps) { c in
                                     NavigationLink(value: Route.league(c)) { LeagueTile(competition: c) }
@@ -27,6 +28,13 @@ struct LeaguesView: View {
                 .padding(.bottom, 40)
             }
             .scrollIndicators(.hidden)
+            .task {
+                if Launch.args.contains("-scroll") {
+                    try? await Task.sleep(for: .seconds(1))
+                    proxy.scrollTo(CompGroup.europe.id, anchor: .top)
+                }
+            }
+            }
             .background { AmbientBackground(colors: [Color(red: 0.42, green: 0.17, blue: 0.57), Color(red: 0.12, green: 0.25, blue: 0.66), .brand], intensity: 0.8) }
             .navigationTitle("Ligues")
             .searchable(text: $query, prompt: "Rechercher une compétition")
@@ -58,21 +66,49 @@ struct LeaguesView: View {
 
 struct LeagueTile: View {
     let competition: Competition
+    private var theme: CompetitionTheme? { CompetitionTheme(competition.id) }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            ZStack {
-                Circle().fill(.white.opacity(0.9)).frame(width: 46, height: 46)
-                    .shadow(color: competition.tint.opacity(0.6), radius: 10)
-                LeagueLogo(league: competition.id, size: 30)
-                    .environment(\.colorScheme, .light)
-            }
+            LeagueBadge(league: competition.id, size: 50, darkDisc: theme?.base[0] ?? Color(red: 0.06, green: 0.08, blue: 0.2),
+                        glow: theme?.accent ?? competition.tint)
             Spacer(minLength: 14)
-            Text(competition.name).font(.headline).foregroundStyle(.primary).lineLimit(2).multilineTextAlignment(.leading)
-            Text(competition.area).font(.caption).foregroundStyle(.secondary)
+            Text(competition.name).font(.headline).foregroundStyle(theme != nil ? Color.white : Color.primary).lineLimit(2).multilineTextAlignment(.leading)
+            Text(competition.area).font(.caption).foregroundStyle(theme != nil ? Color.white.opacity(0.7) : Color.secondary)
         }
         .frame(maxWidth: .infinity, minHeight: 128, alignment: .leading)
         .padding(14)
-        .glassSurface(cornerRadius: 26, wash: [competition.tint, competition.tint.opacity(0.4)], washOpacity: 0.45)
+        .background {
+            if let theme { ThemedTileBackground(theme: theme).clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous)) }
+        }
+        .glassSurface(cornerRadius: 26, wash: theme == nil ? [competition.tint, competition.tint.opacity(0.4)] : [], washOpacity: 0.45)
+    }
+}
+
+/// Fond fixe des tuiles de coupes d'Europe : dégradé du thème, rubans de lumière, étoiles pour la LdC.
+struct ThemedTileBackground: View {
+    let theme: CompetitionTheme
+    var body: some View {
+        Canvas { ctx, size in
+            ctx.fill(Path(CGRect(origin: .zero, size: size)),
+                     with: .linearGradient(Gradient(colors: theme.base), startPoint: .zero, endPoint: CGPoint(x: size.width, y: size.height)))
+            for (i, c) in theme.streaks.prefix(3).enumerated() {
+                var l = ctx
+                l.translateBy(x: size.width * 0.72 + Double(i) * 12, y: -10)
+                l.rotate(by: .degrees(22))
+                let rect = CGRect(x: -1.5, y: 0, width: 3, height: size.height * 1.4)
+                let shade = GraphicsContext.Shading.linearGradient(Gradient(colors: [c.opacity(0), c, c.opacity(0)]), startPoint: .zero, endPoint: CGPoint(x: 0, y: size.height * 1.4))
+                l.drawLayer { g in g.addFilter(.blur(radius: 8)); g.fill(Path(rect.insetBy(dx: -4, dy: 0)), with: shade) }
+                l.fill(Path(roundedRect: rect, cornerRadius: 1.5), with: shade)
+            }
+            if theme.stars {
+                let pts: [(Double, Double, Double)] = [(0.55, 0.18, 2.2), (0.85, 0.35, 1.6), (0.35, 0.55, 1.2), (0.9, 0.8, 2), (0.62, 0.62, 1.4), (0.2, 0.85, 1.1), (0.75, 0.1, 1.3)]
+                for p in pts {
+                    let r = p.2
+                    ctx.fill(Path(ellipseIn: CGRect(x: p.0 * size.width - r, y: p.1 * size.height - r, width: r * 2, height: r * 2)), with: .color(.white.opacity(0.85)))
+                }
+            }
+        }
     }
 }
 
@@ -137,10 +173,8 @@ struct CompetitionView: View {
                                 .rotationEffect(.degrees(logoIn ? 360 : 0))
                                 .animation(.linear(duration: 14).repeatForever(autoreverses: false), value: logoIn)
                         }
-                        Circle().fill(theme?.lightLogo == true ? AnyShapeStyle(LinearGradient(colors: [theme!.base[0], .black], startPoint: .top, endPoint: .bottom)) : AnyShapeStyle(Color.white.opacity(0.92)))
-                            .frame(width: 88, height: 88)
-                            .shadow(color: accent.opacity(0.85), radius: logoIn ? 30 : 6)
-                        LeagueLogo(league: competition.id, size: 58).environment(\.colorScheme, theme?.lightLogo == true ? .dark : .light)
+                        LeagueBadge(league: competition.id, size: 88, darkDisc: theme?.base[0] ?? Color(red: 0.06, green: 0.08, blue: 0.2), glow: accent)
+                            .shadow(color: accent.opacity(0.6), radius: logoIn ? 24 : 4)
                     }
                     .scaleEffect(logoIn ? 1 : 0.7)
                     .opacity(logoIn ? 1 : 0)

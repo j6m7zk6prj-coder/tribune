@@ -108,7 +108,7 @@ struct StandingsTable: View {
         let hi = highlight.contains(r.id)
         return HStack(spacing: 0) {
             HStack(spacing: 6) {
-                RoundedRectangle(cornerRadius: 1.5).fill(r.noteColor ?? .clear).frame(width: 3, height: 18)
+                RoundedRectangle(cornerRadius: 2).fill(r.noteColor.map(vivid) ?? .clear).frame(width: 4, height: 22)
                 Text("\(r.rank)").font(.footnote.monospacedDigit()).foregroundStyle(.secondary)
             }
             .frame(width: 28, alignment: .leading)
@@ -141,12 +141,27 @@ struct StandingsTable: View {
         return VStack(alignment: .leading, spacing: 8) {
             ForEach(notes) { n in
                 HStack(spacing: 8) {
-                    Circle().fill(n.color).frame(width: 8, height: 8)
+                    Circle().fill(vivid(n.color)).frame(width: 9, height: 9)
                     Text(n.text).font(.caption).foregroundStyle(.secondary)
                 }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 4)
+    }
+}
+
+/// Couleur de zone franche et saturée (qualification, relégation…), sans dégradé.
+func vivid(_ c: Color) -> Color {
+    var h: CGFloat = 0, sat: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+    UIColor(c).getHue(&h, saturation: &sat, brightness: &b, alpha: &a)
+    if sat < 0.15 { return Color(white: 0.75) }
+    switch h {
+    case ..<0.05, 0.92...: return Color(red: 1.0, green: 0.18, blue: 0.22)          // rouge
+    case 0.05..<0.13: return Color(red: 1.0, green: 0.55, blue: 0.0)                 // orange
+    case 0.13..<0.2: return Color(red: 1.0, green: 0.84, blue: 0.0)                  // jaune
+    case 0.2..<0.47: return Color(red: 0.1, green: 0.9, blue: 0.35)                  // vert
+    case 0.47..<0.72: return Color(red: 0.15, green: 0.55, blue: 1.0)                // bleu
+    default: return Color(hue: Double(h), saturation: 0.85, brightness: 0.95)
     }
 }
