@@ -88,6 +88,9 @@ struct ClubGoalStyle {
 
 // MARK: - Courbes d'animation
 
+/// Angle à partir d'un CGFloat (évite les conversions ambiguës).
+func deg(_ x: CGFloat) -> Angle { Angle.degrees(Double(x)) }
+
 enum Ease {
     static func seg(_ t: CGFloat, _ a: CGFloat, _ b: CGFloat) -> CGFloat { max(0, min(1, (t - a) / (b - a))) }
     static func outCubic(_ x: CGFloat) -> CGFloat { 1 - pow(1 - x, 3) }
@@ -232,7 +235,7 @@ struct ScoreBar: View {
                 Logo(url: replay.side.logo, size: 70)
                     .shadow(color: .black.opacity(0.4), radius: 6)
                     .scaleEffect(Ease.outBack(lp, 2.4) * (0.85 + 0.15 * lo))
-                    .rotationEffect(.degrees(-25 * (1 - Ease.outCubic(lp))))
+                    .rotationEffect(deg(-25 * (1 - Ease.outCubic(lp))))
                     .opacity(lp > 0 ? lo : 0)
                     .offset(x: -14)
             }
@@ -263,10 +266,10 @@ struct FlipDigit: View {
     var body: some View {
         ZStack {
             Text("\(old)")
-                .rotation3DEffect(.degrees(-90 * Ease.seg(p, 0, 0.5)), axis: (x: 1, y: 0, z: 0), anchor: .center, perspective: 0.6)
+                .rotation3DEffect(deg(-90 * Ease.seg(p, 0, 0.5)), axis: (x: 1, y: 0, z: 0), anchor: .center, perspective: 0.6)
                 .opacity(p < 0.5 ? 1 : 0)
             Text("\(new)")
-                .rotation3DEffect(.degrees(90 * (1 - Ease.outBack(Ease.seg(p, 0.5, 1), 1.2))), axis: (x: 1, y: 0, z: 0), anchor: .center, perspective: 0.6)
+                .rotation3DEffect(deg(90 * (1 - Ease.outBack(Ease.seg(p, 0.5, 1), 1.2))), axis: (x: 1, y: 0, z: 0), anchor: .center, perspective: 0.6)
                 .opacity(p >= 0.5 ? 1 : 0)
                 .scaleEffect(1 + 0.25 * sin(.pi * Ease.seg(p, 0.5, 1)))
         }
@@ -316,7 +319,7 @@ struct WipeLayer: View {
             let s = Ease.inOutCubic(Ease.seg(t, 1.3, 1.8))
             LinearGradient(colors: [.clear, .white.opacity(0.55), .clear], startPoint: .leading, endPoint: .trailing)
                 .frame(width: 70)
-                .rotationEffect(.degrees(18))
+                .rotationEffect(deg(18))
                 .offset(x: -w / 2 - 60 + (w + 120) * s)
                 .opacity(s > 0 && s < 1 ? 1 : 0)
                 .blendMode(.plusLighter)
@@ -337,7 +340,7 @@ struct WipeLayer: View {
         case .rise:
             base.offset(y: 36 * (1 - Ease.outCubic(q))).blur(radius: 6 * (1 - q)).opacity(q)
         case .spin:
-            base.rotation3DEffect(.degrees(100 * (1 - Ease.outBack(q))), axis: (x: 0, y: 1, z: 0)).opacity(q > 0 ? 1 : 0)
+            base.rotation3DEffect(deg(100 * (1 - Ease.outBack(q))), axis: (x: 0, y: 1, z: 0)).opacity(q > 0 ? 1 : 0)
         case .stretch:
             base.scaleEffect(x: max(0.01, Ease.outBack(q, 2.2)), y: 1 + 0.4 * (1 - q)).opacity(q > 0 ? 1 : 0)
         }
@@ -472,7 +475,7 @@ struct MotifStage: View {
         ZStack {
             CannonShape().fill(LinearGradient(colors: [Color(white: 0.85), Color(white: 0.45)], startPoint: .top, endPoint: .bottom))
                 .frame(width: 120, height: 70)
-                .rotationEffect(.degrees(-14))
+                .rotationEffect(deg(-14))
                 .position(x: w * 0.2 - recoil, y: h * 0.62)
                 .scaleEffect(Ease.outBack(Ease.seg(p, 0, 0.12)))
             Circle().fill(Color(white: 0.15)).frame(width: 22, height: 22)
@@ -498,7 +501,7 @@ struct MotifStage: View {
                 let q = Ease.outCubic(Ease.seg(p, CGFloat(i) * 0.08, 0.3 + CGFloat(i) * 0.08))
                 Capsule().fill(LinearGradient(colors: [sec, pri, .clear], startPoint: .top, endPoint: .bottom))
                     .frame(width: 10, height: 150 * q)
-                    .rotationEffect(.degrees(28))
+                    .rotationEffect(deg(28))
                     .position(x: w * 0.38 + CGFloat(i) * 36, y: h * 0.5)
                     .shadow(color: sec, radius: 8)
             }
@@ -510,7 +513,7 @@ struct MotifStage: View {
             ForEach(0..<2, id: \.self) { i in
                 let q = Ease.outBounce(Ease.seg(p, CGFloat(i) * 0.1, 0.5 + CGFloat(i) * 0.1))
                 VStack(spacing: -4) {
-                    Capsule().fill(Color.green).frame(width: 4, height: 34).rotationEffect(.degrees(i == 0 ? 20 : -20))
+                    Capsule().fill(Color.green).frame(width: 4, height: 34).rotationEffect(deg(i == 0 ? 20 : -20))
                     Circle().fill(RadialGradient(colors: [Color(red: 1, green: 0.35, blue: 0.35), Color(red: 0.7, green: 0, blue: 0.05)], center: .topLeading, startRadius: 2, endRadius: 40))
                         .frame(width: 52, height: 52)
                 }
@@ -522,11 +525,14 @@ struct MotifStage: View {
     @ViewBuilder private func m_bees(w: CGFloat, h: CGFloat) -> some View {
         ZStack {
             ForEach(0..<5, id: \.self) { i in
-                let a = t * 3.2 + CGFloat(i) * 1.26
-                let r = 70 * Ease.outCubic(Ease.seg(p, 0, 0.3))
+                let a: CGFloat = t * 3.2 + CGFloat(i) * 1.26
+                let r: CGFloat = 70 * Ease.outCubic(Ease.seg(p, 0, 0.3))
+                let px: CGFloat = w / 2 + cos(a) * r * 1.6
+                let py: CGFloat = h / 2 + sin(a * 2) * r * 0.45
+                let rot: CGFloat = cos(a) * 25
                 BeeView().frame(width: 34, height: 26)
-                    .rotationEffect(.degrees(cos(a) * 25))
-                    .position(x: w / 2 + cos(a) * r * 1.6, y: h / 2 + sin(a * 2) * r * 0.45)
+                    .rotationEffect(deg(rot))
+                    .position(x: px, y: py)
             }
         }
     }
@@ -556,7 +562,7 @@ struct MotifStage: View {
         ZStack {
             ForEach(0..<8, id: \.self) { i in
                 Capsule().fill(sec.opacity(0.25)).frame(width: 4, height: 220)
-                    .rotationEffect(.degrees(CGFloat(i) * 22.5 + t * 20))
+                    .rotationEffect(deg(CGFloat(i) * 22.5 + t * 20))
             }
             .opacity(q)
             TowerShape().fill(LinearGradient(colors: [.white, sec.opacity(0.8)], startPoint: .top, endPoint: .bottom))
@@ -589,12 +595,12 @@ struct MotifStage: View {
                 Ellipse().fill(LinearGradient(colors: [.white, sec], startPoint: .top, endPoint: .bottom))
                     .frame(width: 44, height: 64)
                     .offset(y: -30)
-                    .rotationEffect(.degrees(CGFloat(i) * 72))
+                    .rotationEffect(deg(CGFloat(i) * 72))
             }
             Circle().fill(sec).frame(width: 30, height: 30)
         }
         .scaleEffect(q)
-        .rotationEffect(.degrees(120 * Ease.outCubic(p)))
+        .rotationEffect(deg(120 * Ease.outCubic(p)))
         .position(x: w / 2, y: h / 2)
     }
 
@@ -619,7 +625,7 @@ struct MotifStage: View {
                     .frame(height: 30).offset(y: 40 + CGFloat(i) * 10)
             }
             sym("sailboat.fill", 84, .white)
-                .rotationEffect(.degrees(sin(t * 4) * 6))
+                .rotationEffect(deg(sin(t * 4) * 6))
                 .offset(x: -w * 0.6 * (1 - q), y: -4)
         }
         .position(x: w / 2, y: h / 2)
@@ -686,8 +692,8 @@ struct MotifStage: View {
         let strike = Ease.outBack(Ease.seg(p, 0, 0.3), 2.5)
         let spark = Ease.seg(p, 0.28, 0.7)
         ZStack {
-            sym("hammer.fill", 80, .white).rotationEffect(.degrees(-70 + 50 * strike)).offset(x: -34)
-            sym("hammer.fill", 80, sec).scaleEffect(x: -1, y: 1).rotationEffect(.degrees(70 - 50 * strike)).offset(x: 34)
+            sym("hammer.fill", 80, .white).rotationEffect(deg(-70 + 50 * strike)).offset(x: -34)
+            sym("hammer.fill", 80, sec).scaleEffect(x: -1, y: 1).rotationEffect(deg(70 - 50 * strike)).offset(x: 34)
             ForEach(0..<12, id: \.self) { i in
                 let a = CGFloat(i) / 12 * 2 * .pi
                 Circle().fill(Color.yellow).frame(width: 6, height: 6)
@@ -751,7 +757,7 @@ struct MotifStage: View {
             ForEach(0..<5, id: \.self) { i in
                 let q = Ease.seg(p, CGFloat(i) * 0.09, 0.15 + CGFloat(i) * 0.09)
                 sym("pawprint.fill", 34, i % 2 == 0 ? sec : .white)
-                    .rotationEffect(.degrees(90))
+                    .rotationEffect(deg(90))
                     .scaleEffect(Ease.outBack(q))
                     .position(x: w * 0.15 + CGFloat(i) * w * 0.17, y: h * 0.5 + (i % 2 == 0 ? -18 : 18))
             }
@@ -770,7 +776,7 @@ struct MotifStage: View {
         ZStack {
             Ellipse().stroke(LinearGradient(colors: [.yellow, .white], startPoint: .leading, endPoint: .trailing), lineWidth: 8)
                 .frame(width: 150 * q, height: 40 * q)
-                .rotation3DEffect(.degrees(t * 90), axis: (x: 0, y: 1, z: 0))
+                .rotation3DEffect(deg(t * 90), axis: (x: 0, y: 1, z: 0))
                 .shadow(color: .yellow, radius: 14)
             sym("sparkles", 50, .white).offset(y: 50).opacity(Ease.seg(p, 0.3, 0.45))
         }
