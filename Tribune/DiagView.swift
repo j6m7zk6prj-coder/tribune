@@ -17,49 +17,43 @@ struct DiagView: View {
         .task { await run() }
     }
 
+    func probe(_ label: String, _ u: String, keys: Bool = true) async {
+        guard let url = URL(string: u), let r = try? await URLSession.shared.data(from: url) else { lines.append("\(label) → erreur réseau"); return }
+        let code = (r.1 as? HTTPURLResponse)?.statusCode ?? 0
+        var line = "\(label) → \(code), \(r.0.count) o"
+        if let o = try? JSONSerialization.jsonObject(with: r.0) as? [String: Any], keys { line += " clés=" + o.keys.sorted().joined(separator: ",") }
+        line += " | " + String(decoding: r.0.prefix(260), as: UTF8.self)
+        lines.append(line)
+    }
+
     func run() async {
-        let today = espnDay(.now)
-        let y = espnDay(Calendar.current.date(byAdding: .day, value: -2, to: .now) ?? .now)
-        let s = ESPN.site
-        let urls: [String] = []
-        _ = today
-        for u in urls {
-            var line = String(u.dropFirst(s.count))
-            do {
-                let (data, resp) = try await URLSession.shared.data(from: URL(string: u)!)
-                let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
-                line += " → \(code), \(data.count) o"
-                do {
-                    let r = try JSONDecoder().decode(ScoreboardResponse.self, from: data)
-                    let ms = r.events.compactMap { Match($0, league: "fra.1") }
-                    line += ", \(r.events.count) évts, \(ms.count) matchs"
-                    if let m = ms.first { line += " [\(m.home.short)-\(m.away.short) \(m.date)]" }
-                } catch { line += ", décodage : \(error)" }
-                if code != 200 { line += " " + String(decoding: data.prefix(200), as: UTF8.self) }
-            } catch { line += " → erreur : \(error.localizedDescription)" }
-            lines.append(line)
+        let core = "https://site.api.espn.com/apis/v2/sports/soccer"
+        let site = ESPN.site
+        if let st = try? await ESPN.get("\(core)/uefa.champions/standings?season=2015") as StandingsResponse {
+            lines.append("CL 2015 standings: \(st.groups.count) groupes, 1er=\(st.groups.first?.entries.first?.team?.displayName ?? "-")")
+        } else { lines.append("CL 2015 standings: échec") }
+        if let st = try? await ESPN.get("\(core)/eng.1/standings?season=2015") as StandingsResponse {
+            lines.append("PL 2015 standings: \(st.groups.first?.entries.count ?? 0) équipes, 1er=\(st.groups.first?.entries.first?.team?.displayName ?? "-")")
+        } else { lines.append("PL 2015 standings: échec") }
+        await probe("SB dates=2016", "\(site)/uefa.champions/scoreboard?dates=2016")
+        await probe("SB season=2015", "\(site)/uefa.champions/scoreboard?season=2015")
+        if let sb = try? await ESPN.scoreboard("uefa.champions", dates: "20160528") {
+            lines.append("finale 2016: \(sb.events.count) évt " + (sb.events.first.flatMap { Match($0, league: "uefa.champions") }.map { "\($0.home.short) \($0.home.score ?? "") - \($0.away.score ?? "") \($0.away.short)" } ?? ""))
         }
-        // Points d'accès joueur
-        if let sb = try? await ESPN.scoreboard("eng.1", dates: y), let ev = sb.events.first,
-           let sum = try? await ESPN.summary("eng.1", event: ev.id),
-           let p = sum.rosters.first?.players.first(where: { $0.starter && $0.athlete?.id != nil }), let pid = p.athlete?.id {
-            lines.append("joueur \(p.athlete?.displayName ?? "") id=\(pid) stats match=\(p.stats.map { "\($0.name)=\($0.displayValue ?? "")" }.joined(separator: ","))")
-            for u in ["\(PlayerAPI.base)/eng.1/athletes/\(pid)/overview", "\(PlayerAPI.base)/eng.1/athletes/\(pid)/gamelog"] {
-                if let r = try? await URLSession.shared.data(from: URL(string: u)!) {
-                    let code = (r.1 as? HTTPURLResponse)?.statusCode ?? 0
-                    lines.append(String(u.dropFirst(PlayerAPI.base.count)) + " → \(code) " + String(decoding: r.0.prefix(500), as: UTF8.self))
-                }
+        // calendrier de la saison dans la réponse du tableau des scores
+        if let u = URL(string: "\(site)/uefa.champions/scoreboard"), let r = try? await URLSession.shared.data(from: u),
+           let o = try? JSONSerialization.jsonObject(with: r.0) as? [String: Any],
+           let lg = (o["leagues"] as? [[String: Any]])?.first {
+            lines.append("league clés=" + lg.keys.sorted().joined(separator: ","))
+            if let cal = lg["calendar"] as? [Any] { lines.append("calendar: \(cal.count) éléments, 1er=\(String(describing: cal.first).prefix(160))") }
+            if let ev = (o["events"] as? [[String: Any]])?.first {
+                lines.append("event clés=" + ev.keys.sorted().joined(separator: ","))
+                lines.append("event.season=\(String(describing: ev["season"]).prefix(200))")
+                if let c = (ev["competitions"] as? [[String: Any]])?.first { lines.append("comp clés=" + c.keys.sorted().joined(separator: ",") + " notes=\(String(describing: c["notes"]).prefix(150))") }
             }
-            if let root = await PlayerAPI.json("\(PlayerAPI.base)/eng.1/athletes/\(pid)") as? [String: Any], let at = root["athlete"] as? [String: Any] {
-                lines.append("clés athlete: " + at.keys.sorted().joined(separator: ","))
-            }
-            let b = await PlayerAPI.bio(league: "eng.1", id: pid)
-            lines.append("bio: âge=\(b?.age ?? "-") nat=\(b?.nationality ?? "-") taille=\(b?.height ?? "-") poste=\(b?.position ?? "-")")
-            let g = await PlayerAPI.season(league: "eng.1", id: pid)
-            lines.append("saison: \(g.count) groupes " + g.prefix(2).map { "\($0.title): " + $0.items.prefix(6).map { "\($0.0)=\($0.1)" }.joined(separator: ",") }.joined(separator: " | "))
         }
-        let r = await ESPN.matches(on: Calendar.current.date(byAdding: .day, value: -2, to: Calendar.current.startOfDay(for: .now))!, competitions: Competition.all.filter(\.defaultOn)) { _, _ in }
-        lines.append("matches(J-2) : \(r.matches.count) matchs, échec=\(r.failed)")
-        lines.append("dernière erreur : \(DayCache.lastError)")
+        await probe("leaders v3", "https://site.web.api.espn.com/apis/site/v3/sports/soccer/eng.1/leaders?season=2025")
+        await probe("leaders core", "https://sports.core.api.espn.com/v2/sports/soccer/leagues/eng.1/seasons/2025/types/1/leaders")
+        await probe("statistics", "\(site)/eng.1/statistics?season=2025")
     }
 }
