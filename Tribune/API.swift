@@ -25,8 +25,8 @@ enum ESPN {
         try await get("\(site)/\(league)/summary?event=\(event)")
     }
 
-    static func standings(_ league: String) async throws -> StandingsResponse {
-        try await get("\(core)/\(league)/standings")
+    static func standings(_ league: String, season: Int? = nil) async throws -> StandingsResponse {
+        try await get("\(core)/\(league)/standings" + (season.map { "?season=\($0)" } ?? ""))
     }
 
     static func teams(_ league: String) async throws -> [ESPNTeam] {

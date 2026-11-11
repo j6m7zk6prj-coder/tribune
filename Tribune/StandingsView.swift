@@ -23,8 +23,8 @@ struct StandingGroup: Identifiable {
 }
 
 @MainActor
-func loadStandings(_ league: String) async -> [StandingGroup]? {
-    guard let r = try? await ESPN.standings(league) else { return nil }
+func loadStandings(_ league: String, season: Int? = nil) async -> [StandingGroup]? {
+    guard let r = try? await ESPN.standings(league, season: season) else { return nil }
     return r.groups.enumerated().map { gi, g -> StandingGroup in
         let rows = g.entries.enumerated().compactMap { i, e -> StandingRow? in
             guard let t = e.team, let id = t.id else { return nil }

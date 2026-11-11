@@ -140,9 +140,11 @@ struct Match: Identifiable, Hashable {
     var home: Side
     var away: Side
     let venue: String?
+    let round: String?
 
     init?(_ e: ESPNEvent, league: String, leagueName: String? = nil) {
         guard let comp = e.competitions.first else { return nil }
+        round = e.seasonSlug
         id = e.id
         let slug = e.league?.slug ?? league
         self.league = slug

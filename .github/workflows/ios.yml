@@ -83,10 +83,9 @@ jobs:
           shot () {
             xcrun simctl terminate "$UDID" com.tepsko.tribune 2>/dev/null || true
             xcrun simctl launch "$UDID" com.tepsko.tribune "${@:2}"
-            sleep 12
+            sleep 14
             xcrun simctl io "$UDID" screenshot "shots/$1.png"
           }
-          shot 00-diag -diag
           shot 01-matchs-aujourdhui -tab matches
           shot 02-matchs-jour -tab matches -day -2
           shot 03-match-resume -tab matches -day -2 -open match
@@ -96,6 +95,10 @@ jobs:
           shot 06-match-classement -tab matches -day -2 -open match -detailTab table
           shot 07-ligues -tab leagues
           shot 08-ligue -tab leagues -open league
+          shot 08b-cl-2015-finale -tab leagues -open league -league uefa.champions -season 2015 -pane final
+          shot 08c-pl-2015-classement -tab leagues -open league -league eng.1 -season 2015
+          shot 08d-pl-stats -tab leagues -open league -league eng.1 -season 2025 -pane stats
+          shot 08e-cdm-2022 -tab leagues -open league -league fifa.world -season 2022 -pane final
           shot 09-suivis -tab following -seed
           shot 10-equipe -tab following -seed -open team
           shot 13-widgets -widgets

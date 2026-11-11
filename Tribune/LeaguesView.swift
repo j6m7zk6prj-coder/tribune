@@ -32,7 +32,7 @@ struct LeaguesView: View {
             .searchable(text: $query, prompt: "Rechercher une compétition")
             .tribuneDestinations()
             .task {
-                if Launch.take("league") { path.append(Route.league(Competition.all[0])) }
+                if Launch.take("league") { path.append(Route.league(Competition.named(Launch.value("-league") ?? "") ?? Competition.all[0])) }
                 await fetchMissingLogos()
             }
         }
@@ -82,12 +82,43 @@ struct CompetitionView: View {
     @Environment(AppStore.self) private var store
     let competition: Competition
 
-    enum Pane: String, CaseIterable, Identifiable { case table = "Classement", matches = "Matchs"; var id: String { rawValue } }
+    enum Pane: String, CaseIterable, Identifiable {
+        case table = "Classement", bracket = "Phase finale", matches = "Matchs", stats = "Stats"
+        var id: String { rawValue }
+    }
 
-    @State private var section: Pane = .table
+    @State private var season: Int
+    @State private var section: Pane
     @State private var standings: [StandingGroup]? = nil
     @State private var matches: [Match] = []
+    @State private var rounds: [Round] = []
+    @State private var leaders: [LeaderCategory] = []
     @State private var loading = true
+    @State private var loadingLeaders = true
+    @State private var showAllResults = false
+
+    init(competition: Competition) {
+        self.competition = competition
+        let launchSeason = Launch.value("-season").flatMap { Int($0) }
+        _season = State(initialValue: launchSeason.flatMap { s in competition.seasons.contains(s) ? s : nil } ?? competition.seasons.first ?? Competition.currentSeason)
+        let pane: Pane
+        switch Launch.value("-pane") {
+        case "final": pane = .bracket
+        case "stats": pane = .stats
+        case "matches": pane = .matches
+        default: pane = .table
+        }
+        _section = State(initialValue: pane)
+    }
+
+    private var panes: [Pane] {
+        var p: [Pane] = []
+        if !(standings ?? []).isEmpty { p.append(.table) }
+        if !rounds.isEmpty { p.append(.bracket) }
+        p.append(.matches)
+        if !leaders.isEmpty || loadingLeaders { p.append(.stats) }
+        return p
+    }
 
     var body: some View {
         ScrollView {
@@ -99,58 +130,101 @@ struct CompetitionView: View {
                         LeagueLogo(league: competition.id, size: 58).environment(\.colorScheme, .light)
                     }
                     Text(competition.name).font(.title.weight(.bold))
-                    Text(competition.area).font(.subheadline).foregroundStyle(.secondary)
+                    Menu {
+                        Picker("Saison", selection: $season) {
+                            ForEach(competition.seasons, id: \.self) { y in Text(competition.seasonLabel(y)).tag(y) }
+                        }
+                    } label: {
+                        HStack(spacing: 6) {
+                            Text(competition.isTournament ? "Édition \(competition.seasonLabel(season))" : "Saison \(competition.seasonLabel(season))")
+                                .font(.subheadline.weight(.semibold))
+                            Image(systemName: "chevron.down").font(.caption.weight(.bold))
+                        }
+                        .foregroundStyle(.primary)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 9)
+                        .glassSurface(cornerRadius: 20, tint: competition.tint, interactive: true)
+                    }
+                    .sensoryFeedback(.selection, trigger: season)
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.top, 6)
 
-                if !(standings ?? []).isEmpty {
-                    GlassTabs(tabs: Pane.allCases, selection: $section, tint: competition.tint) { $0.rawValue }
+                if panes.count > 1 {
+                    GlassTabs(tabs: panes, selection: $section, tint: competition.tint) { $0.rawValue }
                 }
 
-                if loading {
-                    ProgressView().padding(.vertical, 60)
-                } else if section == .table, let s = standings, !s.isEmpty {
-                    StandingsTable(league: competition.id, preloaded: s).transition(.opacity)
-                } else {
-                    VStack(spacing: 16) { matchList }.transition(.opacity)
+                Group {
+                    if loading {
+                        ProgressView().padding(.vertical, 60)
+                    } else {
+                        switch section {
+                        case .table:
+                            if let s = standings, !s.isEmpty { StandingsTable(league: competition.id, preloaded: s) }
+                        case .bracket:
+                            KnockoutView(rounds: rounds)
+                        case .matches:
+                            VStack(spacing: 16) { matchList }
+                        case .stats:
+                            if loadingLeaders { ProgressView().padding(.vertical, 60) }
+                            else if leaders.isEmpty {
+                                ContentUnavailableView("Pas de statistiques", systemImage: "chart.bar", description: Text("ESPN ne fournit pas les meilleurs joueurs pour cette saison."))
+                            } else { LeadersView(categories: leaders, tint: competition.tint) }
+                        }
+                    }
                 }
+                .transition(.opacity.combined(with: .offset(y: 10)))
+                .id("\(section.rawValue)-\(season)")
             }
             .padding(.horizontal, 16)
-            .padding(.bottom, 32)
+            .padding(.bottom, 40)
         }
         .scrollIndicators(.hidden)
         .background { AmbientBackground(colors: [competition.tint, competition.tint.opacity(0.7), .brand], intensity: 1.1) }
         .navigationTitle(competition.name)
         .navigationBarTitleDisplayMode(.inline)
-        .task { await load() }
+        .task(id: season) { await load() }
         .refreshable { await load() }
+        .onChange(of: panes) { _, p in if !p.contains(section) { section = p.first ?? .matches } }
     }
 
     @ViewBuilder private var matchList: some View {
         let upcoming = matches.filter { $0.state != .post }.sorted { $0.date < $1.date }
         let results = matches.filter { $0.state == .post }.sorted { $0.date > $1.date }
         if matches.isEmpty {
-            ContentUnavailableView("Aucun match", systemImage: "calendar", description: Text("Pas de match dans les semaines à venir."))
+            ContentUnavailableView("Aucun match", systemImage: "calendar", description: Text("Pas de match pour cette saison."))
                 .padding(.vertical, 30)
         }
-        if !upcoming.isEmpty { DatedMatchList(title: "À venir", matches: upcoming) }
-        if !results.isEmpty { DatedMatchList(title: "Résultats", matches: results) }
+        if !upcoming.isEmpty { DatedMatchList(title: "À venir", matches: Array(upcoming.prefix(20))) }
+        if !results.isEmpty {
+            DatedMatchList(title: "Résultats", matches: Array(results.prefix(showAllResults ? 400 : 30)))
+            if results.count > 30 && !showAllResults {
+                Button { withAnimation(.smooth) { showAllResults = true } } label: {
+                    Text("Afficher les \(results.count) résultats").font(.subheadline.weight(.semibold))
+                        .padding(.horizontal, 18).padding(.vertical, 10)
+                        .glassSurface(cornerRadius: 20, tint: competition.tint, interactive: true)
+                }
+                .buttonStyle(Pressable())
+            }
+        }
     }
 
     func load() async {
-        let cal = Calendar.current
-        let from = cal.date(byAdding: .day, value: -10, to: .now) ?? .now
-        let to = cal.date(byAdding: .day, value: 21, to: .now) ?? .now
-        async let s = loadStandings(competition.id)
-        async let m = ESPN.range(competition.id, from: from, to: to)
-        let (st, sb) = await (s, m)
-        standings = st
-        var seen = Set<String>()
-        matches = sb.events.compactMap { Match($0, league: competition.id, leagueName: competition.name) }.filter { seen.insert($0.id).inserted }
-        if let l = sb.league { store.setLogos(competition.id, l) }
-        if (st ?? []).isEmpty { section = .matches }
-        loading = false
+        let y = season
+        withAnimation(.smooth) { loading = true; loadingLeaders = true; showAllResults = false }
+        async let s = loadStandings(competition.id, season: y == Competition.currentSeason && !competition.isTournament ? nil : y)
+        async let m = ESPN.season(competition, year: y)
+        let (st, ms) = await (s, m)
+        guard y == season else { return }
+        withAnimation(.smooth(duration: 0.4)) {
+            standings = st
+            matches = ms
+            rounds = Knockout.rounds(ms)
+            loading = false
+        }
+        let l = await LeadersAPI.load(competition.id, season: y)
+        guard y == season else { return }
+        withAnimation(.smooth(duration: 0.4)) { leaders = l; loadingLeaders = false }
     }
 }
 

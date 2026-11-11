@@ -186,10 +186,15 @@ struct ESPNEvent: Decodable {
     let status: ESPNStatus?
     let competitions: [ESPNCompetition]
     let league: ESPNLeague?
+    let seasonYear: Int?
+    let seasonSlug: String?
     init(from d: Decoder) throws {
         let c = try d.container(keyedBy: AnyKey.self)
         guard let id = c.str(c["id"]) else { throw DecodingError.dataCorrupted(.init(codingPath: [], debugDescription: "id")) }
         self.id = id
+        if let s = try? c.nestedContainer(keyedBy: AnyKey.self, forKey: c["season"]) {
+            seasonYear = s.str(s["year"]).flatMap { Int($0) }; seasonSlug = s.str(s["slug"])
+        } else { seasonYear = nil; seasonSlug = nil }
         date = c.str(c["date"]); status = c.obj(ESPNStatus.self, c["status"])
         competitions = c.list(ESPNCompetition.self, c["competitions"])
         league = c.obj(ESPNLeague.self, c["league"])
