@@ -86,8 +86,7 @@ struct FollowingView: View {
         await withTaskGroup(of: (String, Match?).self) { g in
             for t in store.favorites {
                 g.addTask {
-                    let evs = await ESPN.schedule(t.league, team: t.id)
-                    let ms = evs.compactMap { Match($0, league: t.league) }
+                    let ms = await ESPN.teamMatches(t, upcomingOnly: true)
                     let next = ms.filter { $0.state == .live }.first ?? ms.filter { $0.state == .pre && $0.date > .now }.min { $0.date < $1.date }
                     return (t.id, next)
                 }
@@ -268,9 +267,9 @@ struct TeamView: View {
         .navigationTitle(team.name)
         .navigationBarTitleDisplayMode(.inline)
         .task {
-            let evs = await ESPN.schedule(team.league, team: team.id)
+            let ms = await ESPN.teamMatches(team)
             withAnimation(.smooth(duration: 0.4)) {
-                matches = evs.compactMap { Match($0, league: team.league) }
+                matches = ms
                 loading = false
             }
         }

@@ -20,86 +20,136 @@ struct WMatch: Identifiable {
     let match: Match
     let homeImg: UIImage?
     let awayImg: UIImage?
+    var leagueImg: UIImage? = nil
     var id: String { match.id }
 }
 
 enum WidgetData {
-    static let competitions: [Competition] = Competition.all.filter { [CompGroup.top, .europe, .nations].contains($0.group) }
-
-    static func image(_ url: URL?) async -> UIImage? {
+    static func image(_ url: URL?, size: CGFloat = 90) async -> UIImage? {
         guard let url, let r = try? await URLSession.shared.data(from: url), let img = UIImage(data: r.0) else { return nil }
-        return img.preparingThumbnail(of: CGSize(width: 90, height: 90)) ?? img
+        return img.preparingThumbnail(of: CGSize(width: size, height: size)) ?? img
+    }
+
+    static var shared: UserDefaults { UserDefaults(suiteName: LeagueBadges.group) ?? .standard }
+
+    /// Équipes suivies dans l'app (espace partagé), sinon celles de l'app elle-même (aperçu).
+    static func followed() -> [TeamRef] {
+        for d in [shared, UserDefaults.standard] {
+            if let data = d.data(forKey: "favorites"), let f = try? JSONDecoder().decode([TeamRef].self, from: data), !f.isEmpty { return f }
+        }
+        return []
+    }
+
+    static func leagueLogoURL(_ slug: String) async -> URL? {
+        for d in [shared, UserDefaults.standard] {
+            if let logos = d.dictionary(forKey: "leagueLogos") as? [String: String],
+               let s = logos[slug + "#badge"] ?? logos[slug], let u = URL(string: s) { return u }
+        }
+        if let id = LeagueBadges.ids[slug] { return await LeagueBadges.lookup(id)?.badge }
+        return nil
+    }
+
+    static func leagueImage(_ slug: String) async -> UIImage? {
+        await image(await leagueLogoURL(slug), size: 60)
     }
 
     static func withImages(_ ms: [Match]) async -> [WMatch] {
-        await withTaskGroup(of: (Int, UIImage?, UIImage?).self, returning: [WMatch].self) { g in
+        await withTaskGroup(of: (Int, UIImage?, UIImage?, UIImage?).self, returning: [WMatch].self) { g in
             for (i, m) in ms.enumerated() {
                 g.addTask {
                     async let h = WidgetData.image(m.home.logo)
                     async let a = WidgetData.image(m.away.logo)
-                    return (i, await h, await a)
+                    async let l = WidgetData.leagueImage(m.league)
+                    return (i, await h, await a, await l)
                 }
             }
-            var imgs: [Int: (UIImage?, UIImage?)] = [:]
-            for await (i, h, a) in g { imgs[i] = (h, a) }
-            return ms.enumerated().map { (i, m) -> WMatch in WMatch(match: m, homeImg: imgs[i]?.0, awayImg: imgs[i]?.1) }
+            var imgs: [Int: (UIImage?, UIImage?, UIImage?)] = [:]
+            for await (i, h, a, l) in g { imgs[i] = (h, a, l) }
+            return ms.enumerated().map { (i, m) -> WMatch in
+                WMatch(match: m, homeImg: imgs[i]?.0, awayImg: imgs[i]?.1, leagueImg: imgs[i]?.2)
+            }
         }
-    }
-
-    /// Matchs à mettre en avant : en direct, puis à venir, puis terminés récemment.
-    static func featured(_ ms: [Match]) -> [Match] {
-        let live = ms.filter { $0.state == .live }
-        let next = ms.filter { $0.state == .pre }.sorted { $0.date < $1.date }
-        let done = ms.filter { $0.state == .post }.sorted { $0.date > $1.date }
-        return live + next + done
     }
 }
 
-// MARK: - Widget « Matchs »
+// MARK: - Widget « Mes équipes » : prochain match de chaque équipe suivie
+
+struct FollowedIntent: WidgetConfigurationIntent {
+    static var title: LocalizedStringResource = "Mes équipes"
+    static var description = IntentDescription("Laisse vide pour reprendre les équipes suivies dans Tribune.")
+    @Parameter(title: "Équipes") var teams: [TeamEntity]?
+}
 
 struct MatchesEntry: TimelineEntry {
     let date: Date
     let matches: [WMatch]
+    var followed: Set<String> = []
+    var message: String? = nil
 }
 
-struct MatchesProvider: TimelineProvider {
+struct MatchesProvider: AppIntentTimelineProvider {
     func placeholder(in context: Context) -> MatchesEntry { MatchesEntry(date: .now, matches: []) }
 
-    func getSnapshot(in context: Context, completion: @escaping (MatchesEntry) -> Void) {
-        Task { completion(await load(limit: limit(context.family))) }
+    func snapshot(for configuration: FollowedIntent, in context: Context) async -> MatchesEntry {
+        await load(teams: teams(configuration), limit: limit(context.family))
     }
 
-    func getTimeline(in context: Context, completion: @escaping (Timeline<MatchesEntry>) -> Void) {
-        Task {
-            let e = await load(limit: limit(context.family))
-            let live = e.matches.contains { $0.match.state == .live }
-            completion(Timeline(entries: [e], policy: .after(.now.addingTimeInterval(live ? 300 : 1800))))
-        }
+    func timeline(for configuration: FollowedIntent, in context: Context) async -> Timeline<MatchesEntry> {
+        let e = await load(teams: teams(configuration), limit: limit(context.family))
+        let live = e.matches.contains { $0.match.state == .live }
+        let soon = e.matches.contains { $0.match.date.timeIntervalSinceNow < 3 * 3600 }
+        return Timeline(entries: [e], policy: .after(.now.addingTimeInterval(live ? 300 : soon ? 900 : 3600)))
+    }
+
+    func teams(_ c: FollowedIntent) -> [TeamRef] {
+        let picked = (c.teams ?? []).map { TeamRef(id: $0.teamID, name: $0.name, league: $0.league, logo: nil, color: $0.color) }
+        return picked.isEmpty ? WidgetData.followed() : picked
     }
 
     func limit(_ f: WidgetFamily) -> Int {
         switch f { case .systemSmall: 1; case .systemMedium: 3; default: 6 }
     }
 
-    func load(limit: Int) async -> MatchesEntry {
-        var r = await ESPN.matches(on: Calendar.current.startOfDay(for: .now), competitions: WidgetData.competitions) { _, _ in }
-        if r.matches.isEmpty, let tomorrow = Calendar.current.date(byAdding: .day, value: 1, to: Calendar.current.startOfDay(for: .now)) {
-            r = await ESPN.matches(on: tomorrow, competitions: WidgetData.competitions) { _, _ in }
+    func load(teams: [TeamRef], limit: Int) async -> MatchesEntry {
+        guard !teams.isEmpty else {
+            return MatchesEntry(date: .now, matches: [], message: "Suis des équipes dans Tribune, ou choisis-les en modifiant le widget.")
         }
-        let picked = Array(WidgetData.featured(r.matches).prefix(limit))
-        return MatchesEntry(date: .now, matches: await WidgetData.withImages(picked))
+        let ids = Set(teams.map(\.id))
+        var nexts: [Match] = []
+        await withTaskGroup(of: Match?.self) { g in
+            for t in teams.prefix(8) {
+                g.addTask {
+                    let ms = await ESPN.teamMatches(t, upcomingOnly: true)
+                    return ms.first { $0.state == .live } ?? ms.first { $0.state == .pre && $0.date > .now.addingTimeInterval(-3 * 3600) }
+                }
+            }
+            for await m in g { if let m { nexts.append(m) } }
+        }
+        var seen = Set<String>()
+        let ordered = nexts.filter { seen.insert($0.id).inserted }
+            .sorted { ($0.state == .live ? 0 : 1, $0.date) < ($1.state == .live ? 0 : 1, $1.date) }
+        let picked = Array(ordered.prefix(limit))
+        return MatchesEntry(date: .now, matches: await WidgetData.withImages(picked), followed: ids,
+                            message: picked.isEmpty ? "Aucun match prévu pour tes équipes." : nil)
     }
 }
 
 struct MatchesWidget: Widget {
     var body: some WidgetConfiguration {
-        StaticConfiguration(kind: "TribuneMatches", provider: MatchesProvider()) { entry in
+        AppIntentConfiguration(kind: "TribuneFollowed", intent: FollowedIntent.self, provider: MatchesProvider()) { entry in
             MatchesWidgetView(entry: entry)
         }
-        .configurationDisplayName("Matchs")
-        .description("Les matchs en direct et à venir des grandes compétitions.")
+        .configurationDisplayName("Mes équipes")
+        .description("Le prochain match de chacune de tes équipes suivies.")
         .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
     }
+}
+
+func shortDay(_ d: Date) -> String {
+    let cal = Calendar.current
+    if cal.isDateInToday(d) { return "Aujourd’hui" }
+    if cal.isDateInTomorrow(d) { return "Demain" }
+    return d.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated).locale(fr)).capitalizedFirst
 }
 
 struct MatchesWidgetView: View {
@@ -113,24 +163,26 @@ struct MatchesWidgetView: View {
         let colors = first.map { teamColors($0.match) } ?? (Color.brand, Color(red: 0.1, green: 0.3, blue: 0.6))
         Group {
             if entry.matches.isEmpty {
-                VStack(spacing: 6) {
-                    Image(systemName: "soccerball").font(.title2)
-                    Text("Aucun match aujourd’hui").font(.caption.weight(.semibold)).multilineTextAlignment(.center)
+                VStack(spacing: 8) {
+                    Image(systemName: "star.circle.fill").font(.title)
+                    Text(entry.message ?? "Aucun match").font(.caption.weight(.semibold)).multilineTextAlignment(.center)
                 }
                 .foregroundStyle(.white)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if family == .systemSmall, let m = first {
                 SmallMatch(m: m)
             } else {
                 VStack(alignment: .leading, spacing: family == .systemLarge ? 8 : 6) {
-                    HStack {
-                        Text("Tribune").font(.caption.weight(.heavy))
+                    HStack(spacing: 6) {
+                        Image(systemName: "star.fill").font(.caption2)
+                        Text("Mes équipes").font(.caption.weight(.heavy))
                         Spacer()
                         if entry.matches.contains(where: { $0.match.state == .live }) {
                             HStack(spacing: 4) { Circle().fill(Color.green).frame(width: 6, height: 6); Text("En direct").font(.caption2.weight(.bold)) }
                         }
                     }
                     .foregroundStyle(.white.opacity(0.9))
-                    ForEach(entry.matches) { m in WideRow(m: m, large: family == .systemLarge) }
+                    ForEach(entry.matches) { m in WideRow(m: m, large: family == .systemLarge, followed: entry.followed) }
                     Spacer(minLength: 0)
                 }
             }
@@ -166,22 +218,40 @@ struct WLogo: View {
     }
 }
 
+/// Logo de compétition sur une petite pastille blanche (lisible sur tous les fonds).
+struct WLeague: View {
+    let img: UIImage?
+    var size: CGFloat = 16
+    var body: some View {
+        if let img {
+            Image(uiImage: img).resizable().scaledToFit()
+                .padding(size * 0.14)
+                .frame(width: size, height: size)
+                .background(Circle().fill(.white.opacity(0.92)))
+        }
+    }
+}
+
 struct SmallMatch: View {
     let m: WMatch
     var body: some View {
-        VStack(spacing: 8) {
-            Text(m.match.leagueName).font(.caption2.weight(.bold)).foregroundStyle(.white.opacity(0.8)).lineLimit(1)
+        VStack(spacing: 7) {
+            HStack(spacing: 5) {
+                WLeague(img: m.leagueImg, size: 16)
+                Text(m.match.leagueName).font(.caption2.weight(.bold)).lineLimit(1)
+            }
+            .foregroundStyle(.white.opacity(0.85))
             HStack(spacing: 10) {
-                WLogo(img: m.homeImg, size: 42)
-                WLogo(img: m.awayImg, size: 42)
+                WLogo(img: m.homeImg, size: 40)
+                WLogo(img: m.awayImg, size: 40)
             }
             if m.match.hasScore {
                 Text("\(m.match.home.score ?? "0") – \(m.match.away.score ?? "0")")
-                    .font(.system(size: 30, weight: .heavy, design: .rounded).monospacedDigit())
+                    .font(.system(size: 28, weight: .heavy, design: .rounded).monospacedDigit())
             } else {
                 Text(m.match.kickoff).font(.system(size: 26, weight: .bold, design: .rounded).monospacedDigit())
             }
-            Text(m.match.state == .live ? "En direct · \(m.match.shortStatus)" : m.match.state == .post ? "Terminé" : "\(m.match.home.abbr) – \(m.match.away.abbr)")
+            Text(m.match.state == .live ? "En direct · \(m.match.shortStatus)" : shortDay(m.match.date))
                 .font(.caption2.weight(.semibold))
                 .foregroundStyle(m.match.state == .live ? Color.green : .white.opacity(0.85))
         }
@@ -193,20 +263,24 @@ struct SmallMatch: View {
 struct WideRow: View {
     let m: WMatch
     let large: Bool
+    var followed: Set<String> = []
+
     var body: some View {
         let colors = teamColors(m.match)
         HStack(spacing: 8) {
             WLogo(img: m.homeImg, size: large ? 24 : 20)
-            Text(m.match.home.short).font(.subheadline.weight(.semibold)).lineLimit(1)
+            Text(m.match.home.short)
+                .font(.subheadline.weight(followed.contains(m.match.home.id) ? .heavy : .medium)).lineLimit(1)
                 .frame(maxWidth: .infinity, alignment: .leading)
-            center.frame(width: 62)
-            Text(m.match.away.short).font(.subheadline.weight(.semibold)).lineLimit(1)
+            center.frame(width: 76)
+            Text(m.match.away.short)
+                .font(.subheadline.weight(followed.contains(m.match.away.id) ? .heavy : .medium)).lineLimit(1)
                 .frame(maxWidth: .infinity, alignment: .trailing)
             WLogo(img: m.awayImg, size: large ? 24 : 20)
         }
         .foregroundStyle(.white)
         .padding(.horizontal, 10)
-        .padding(.vertical, large ? 9 : 6)
+        .padding(.vertical, large ? 8 : 5)
         .background(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .fill(LinearGradient(colors: [colors.0.opacity(0.55), colors.1.opacity(0.55)], startPoint: .leading, endPoint: .trailing))
@@ -215,12 +289,17 @@ struct WideRow: View {
     }
 
     @ViewBuilder private var center: some View {
-        VStack(spacing: 0) {
+        VStack(spacing: 1) {
             if m.match.hasScore {
                 Text("\(m.match.home.score ?? "0") – \(m.match.away.score ?? "0")").font(.subheadline.weight(.heavy).monospacedDigit())
                 Text(m.match.shortStatus).font(.system(size: 9, weight: .bold)).foregroundStyle(m.match.state == .live ? Color.green : .white.opacity(0.7))
             } else {
                 Text(m.match.kickoff).font(.subheadline.weight(.bold).monospacedDigit())
+                HStack(spacing: 3) {
+                    WLeague(img: m.leagueImg, size: 11)
+                    Text(shortDay(m.match.date)).font(.system(size: 9, weight: .bold)).lineLimit(1)
+                }
+                .foregroundStyle(.white.opacity(0.8))
             }
         }
     }
@@ -307,8 +386,7 @@ struct TeamProvider: AppIntentTimelineProvider {
     }
 
     func load(_ t: TeamEntity) async -> TeamEntry {
-        let evs = await ESPN.schedule(t.league, team: t.teamID)
-        let ms = evs.compactMap { Match($0, league: t.league) }
+        let ms = await ESPN.teamMatches(TeamRef(id: t.teamID, name: t.name, league: t.league, logo: nil, color: t.color))
         let next = ms.first { $0.state == .live } ?? ms.filter { $0.state == .pre && $0.date > .now }.min { $0.date < $1.date }
         let last = ms.filter { $0.state == .post }.max { $0.date < $1.date }
         let picked = [next, last].compactMap { $0 }
@@ -444,7 +522,7 @@ struct WidgetPreviewView: View {
         .navigationTitle("Widgets")
         .navigationBarTitleDisplayMode(.inline)
         .task {
-            async let m = MatchesProvider().load(limit: 6)
+            async let m = MatchesProvider().load(teams: WidgetData.followed(), limit: 6)
             async let t = TeamProvider().load(TeamProvider.fallback)
             let (mm, tt) = await (m, t)
             withAnimation(.smooth) { matches = mm; team = tt }

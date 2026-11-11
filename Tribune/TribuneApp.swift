@@ -27,6 +27,7 @@ struct TribuneApp: App {
 enum AppTab: String { case matches, leagues, following }
 
 struct RootView: View {
+    @Environment(AppStore.self) private var store
     @State private var tab: AppTab = AppTab(rawValue: Launch.value("-tab") ?? "") ?? .matches
 
     var body: some View {
@@ -42,5 +43,9 @@ struct RootView: View {
                 .tag(AppTab.following)
         }
         .minimizingTabBar()
+        .task {
+            store.shareWithWidgets()
+            await store.refreshBadges()
+        }
     }
 }

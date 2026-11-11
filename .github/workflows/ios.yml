@@ -51,6 +51,10 @@ jobs:
         run: |
           mkdir -p Payload
           cp -R build/Release-iphoneos/Tribune.app Payload/
+          # Signature ad hoc avec les droits (groupe d'apps partagé avec le widget) : iLoader re-signe ensuite.
+          codesign -f -s - --entitlements Entitlements/TribuneWidget.entitlements Payload/Tribune.app/PlugIns/TribuneWidget.appex
+          codesign -f -s - --entitlements Entitlements/Tribune.entitlements Payload/Tribune.app
+          codesign -d --entitlements - Payload/Tribune.app | tail -8
           zip -qry Tribune.ipa Payload
 
       - name: Publier dans Releases
@@ -101,8 +105,8 @@ jobs:
           shot 08e-cdm-2022 -tab leagues -open league -league fifa.world -season 2022 -pane final
           shot 09-suivis -tab following -seed
           shot 10-equipe -tab following -seed -open team
-          shot 13-widgets -widgets
-          shot 13b-widgets-clair -widgets -appearance light
+          shot 13-widgets -widgets -seed
+          shot 00-diag -diag
           shot 11-reglages -tab matches -settings
           shot 12-matchs-clair -tab matches -day -2 -appearance light
           ls -la shots

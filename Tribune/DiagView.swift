@@ -27,33 +27,19 @@ struct DiagView: View {
     }
 
     func run() async {
-        let core = "https://site.api.espn.com/apis/v2/sports/soccer"
-        let site = ESPN.site
-        if let st = try? await ESPN.get("\(core)/uefa.champions/standings?season=2015") as StandingsResponse {
-            lines.append("CL 2015 standings: \(st.groups.count) groupes, 1er=\(st.groups.first?.entries.first?.team?.displayName ?? "-")")
-        } else { lines.append("CL 2015 standings: échec") }
-        if let st = try? await ESPN.get("\(core)/eng.1/standings?season=2015") as StandingsResponse {
-            lines.append("PL 2015 standings: \(st.groups.first?.entries.count ?? 0) équipes, 1er=\(st.groups.first?.entries.first?.team?.displayName ?? "-")")
-        } else { lines.append("PL 2015 standings: échec") }
-        await probe("SB dates=2016", "\(site)/uefa.champions/scoreboard?dates=2016")
-        await probe("SB season=2015", "\(site)/uefa.champions/scoreboard?season=2015")
-        if let sb = try? await ESPN.scoreboard("uefa.champions", dates: "20160528") {
-            lines.append("finale 2016: \(sb.events.count) évt " + (sb.events.first.flatMap { Match($0, league: "uefa.champions") }.map { "\($0.home.short) \($0.home.score ?? "") - \($0.away.score ?? "") \($0.away.short)" } ?? ""))
+        // Logos TheSportsDB : vérifie que chaque identifiant correspond à la bonne compétition.
+        var res: [String] = []
+        for (slug, id) in LeagueBadges.ids.sorted(by: { $0.key < $1.key }) {
+            let r = await LeagueBadges.lookup(id)
+            res.append("\(slug)=\(id):\(r?.name ?? "∅")")
         }
-        // calendrier de la saison dans la réponse du tableau des scores
-        if let u = URL(string: "\(site)/uefa.champions/scoreboard"), let r = try? await URLSession.shared.data(from: u),
-           let o = try? JSONSerialization.jsonObject(with: r.0) as? [String: Any],
-           let lg = (o["leagues"] as? [[String: Any]])?.first {
-            lines.append("league clés=" + lg.keys.sorted().joined(separator: ","))
-            if let cal = lg["calendar"] as? [Any] { lines.append("calendar: \(cal.count) éléments, 1er=\(String(describing: cal.first).prefix(160))") }
-            if let ev = (o["events"] as? [[String: Any]])?.first {
-                lines.append("event clés=" + ev.keys.sorted().joined(separator: ","))
-                lines.append("event.season=\(String(describing: ev["season"]).prefix(200))")
-                if let c = (ev["competitions"] as? [[String: Any]])?.first { lines.append("comp clés=" + c.keys.sorted().joined(separator: ",") + " notes=\(String(describing: c["notes"]).prefix(150))") }
-            }
-        }
-        await probe("leaders v3", "https://site.web.api.espn.com/apis/site/v3/sports/soccer/eng.1/leaders?season=2025")
-        await probe("leaders core", "https://sports.core.api.espn.com/v2/sports/soccer/leagues/eng.1/seasons/2025/types/1/leaders")
-        await probe("statistics", "\(site)/eng.1/statistics?season=2025")
+        lines.append(res.joined(separator: " · "))
+        await probe("FR leagues", "https://www.thesportsdb.com/api/v1/json/123/search_all_leagues.php?c=France&s=Soccer", keys: false)
+        if let sb = try? await ESPN.scoreboard("fra.3") {
+            lines.append("ESPN fra.3: \(sb.events.count) évts, ligue=\(sb.leagues.first?.name ?? "∅")")
+        } else { lines.append("ESPN fra.3: échec") }
+        let psg = TeamRef(id: "160", name: "PSG", league: "fra.1", logo: nil)
+        let ms = await ESPN.teamMatches(psg, upcomingOnly: true)
+        lines.append("PSG à venir: " + ms.prefix(5).map { "\($0.leagueName) \($0.home.abbr)-\($0.away.abbr) \($0.date.formatted(.dateTime.day().month()))" }.joined(separator: " | "))
     }
 }

@@ -19,7 +19,7 @@ struct Competition: Identifiable, Hashable {
     let name: String
     let area: String
     let group: CompGroup
-    var defaultOn: Bool { group != .others }
+    var defaultOn: Bool { group != .others || id == "fra.3" }
 
     static let all: [Competition] = [
         .init(id: "fra.1", name: "Ligue 1", area: "France", group: .top),
@@ -49,6 +49,7 @@ struct Competition: Identifiable, Hashable {
         .init(id: "ger.dfb_pokal", name: "DFB-Pokal", area: "Allemagne", group: .cups),
 
         .init(id: "fra.2", name: "Ligue 2", area: "France", group: .others),
+        .init(id: "fra.3", name: "Ligue 3", area: "France", group: .others),
         .init(id: "por.1", name: "Liga Portugal", area: "Portugal", group: .others),
         .init(id: "ned.1", name: "Eredivisie", area: "Pays-Bas", group: .others),
         .init(id: "bel.1", name: "Pro League", area: "Belgique", group: .others),
@@ -86,6 +87,7 @@ struct Competition: Identifiable, Hashable {
         case "ita.coppa_italia": hex = "1F8A4C"
         case "ger.dfb_pokal": hex = "2F7D32"
         case "fra.2": hex = "E4572E"
+        case "fra.3": hex = "2A5C9E"
         case "por.1": hex = "0F5E3C"
         case "ned.1": hex = "E35D1A"
         case "bel.1": hex = "C4302B"

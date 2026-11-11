@@ -43,6 +43,43 @@ enum ESPN {
         return all.filter { seen.insert($0.id).inserted }
     }
 
+    /// Compétitions où une équipe peut jouer : son championnat, les coupes d'Europe et sa coupe nationale.
+    static func competitions(for t: TeamRef) -> [String] {
+        let nations = Competition.named(t.league)?.group == .nations
+        if nations { return ["uefa.nations", "fifa.friendly", "fifa.worldq.uefa", "fifa.world", "uefa.euro", "uefa.euroq"] }
+        let cups: [String: [String]] = [
+            "fra": ["fra.coupe_de_france"], "eng": ["eng.fa", "eng.league_cup"], "esp": ["esp.copa_del_rey"],
+            "ita": ["ita.coppa_italia"], "ger": ["ger.dfb_pokal"],
+        ]
+        let country = String(t.league.prefix { $0 != "." })
+        var out = [t.league]
+        if Competition.named(t.league)?.group != .europe { out += ["uefa.champions", "uefa.europa", "uefa.europa.conf"] }
+        out += cups[country] ?? []
+        return out
+    }
+
+    /// Matchs d'une équipe dans toutes ses compétitions.
+    static func teamMatches(_ t: TeamRef, upcomingOnly: Bool = false) async -> [Match] {
+        let leagues = competitions(for: t)
+        var out: [Match] = []
+        await withTaskGroup(of: [Match].self) { g in
+            for l in leagues {
+                g.addTask {
+                    let evs: [ESPNEvent]
+                    if upcomingOnly {
+                        evs = ((try? await ESPN.get("\(site)/\(l)/teams/\(t.id)/schedule?fixture=true") as ScheduleResponse)?.events) ?? []
+                    } else {
+                        evs = await ESPN.schedule(l, team: t.id)
+                    }
+                    return evs.compactMap { Match($0, league: l) }.filter { $0.home.id == t.id || $0.away.id == t.id }
+                }
+            }
+            for await part in g { out += part }
+        }
+        var seen = Set<String>()
+        return out.filter { seen.insert($0.id).inserted }.sorted { $0.date < $1.date }
+    }
+
     /// Matchs d'une compétition sur une période (ESPN refuse les plages : une requête par jour).
     static func range(_ league: String, from: Date, to: Date) async -> (events: [ESPNEvent], league: ESPNLeague?) {
         let cal = Calendar.current
