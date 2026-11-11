@@ -137,9 +137,10 @@ struct CompetitionView: View {
                                 .rotationEffect(.degrees(logoIn ? 360 : 0))
                                 .animation(.linear(duration: 14).repeatForever(autoreverses: false), value: logoIn)
                         }
-                        Circle().fill(.white.opacity(0.92)).frame(width: 88, height: 88)
+                        Circle().fill(theme?.lightLogo == true ? AnyShapeStyle(LinearGradient(colors: [theme!.base[0], .black], startPoint: .top, endPoint: .bottom)) : AnyShapeStyle(Color.white.opacity(0.92)))
+                            .frame(width: 88, height: 88)
                             .shadow(color: accent.opacity(0.85), radius: logoIn ? 30 : 6)
-                        LeagueLogo(league: competition.id, size: 58).environment(\.colorScheme, .light)
+                        LeagueLogo(league: competition.id, size: 58).environment(\.colorScheme, theme?.lightLogo == true ? .dark : .light)
                     }
                     .scaleEffect(logoIn ? 1 : 0.7)
                     .opacity(logoIn ? 1 : 0)
@@ -155,7 +156,7 @@ struct CompetitionView: View {
                                 .font(.subheadline.weight(.semibold))
                             Image(systemName: "chevron.down").font(.caption.weight(.bold))
                         }
-                        .foregroundStyle(.primary)
+                        .foregroundStyle(theme != nil ? Color.white : Color.primary)
                         .padding(.horizontal, 16)
                         .padding(.vertical, 9)
                         .glassSurface(cornerRadius: 20, tint: accent, interactive: true)
@@ -200,6 +201,7 @@ struct CompetitionView: View {
             else { AmbientBackground(colors: [competition.tint, competition.tint.opacity(0.7), .brand], intensity: 1.1) }
         }
         .themedDark(theme != nil)
+        .tint(accent)
         .navigationTitle(competition.name)
         .navigationBarTitleDisplayMode(.inline)
         .task(id: season) { await load() }
