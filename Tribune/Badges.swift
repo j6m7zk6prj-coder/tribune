@@ -12,7 +12,7 @@ enum LeagueBadges {
         "conmebol.america": "4499", "caf.nations": "4496",
         "fra.coupe_de_france": "4484", "eng.fa": "4482", "eng.league_cup": "4570",
         "esp.copa_del_rey": "4483", "ita.coppa_italia": "4506", "ger.dfb_pokal": "4485",
-        "fra.2": "4401", "fra.3": "4636", "por.1": "4344", "ned.1": "4337", "bel.1": "4338",
+        "fra.2": "4401", "fra.3": "4637", "por.1": "4344", "ned.1": "4337", "bel.1": "4338",
         "tur.1": "4339", "ksa.1": "4668", "usa.1": "4346",
     ]
 
@@ -31,7 +31,7 @@ enum LeagueBadges {
     /// Récupère les logos manquants (une fois par semaine au plus), 3 requêtes à la fois.
     static func refresh(_ known: [String: String]) async -> [String: String] {
         let d = UserDefaults.standard
-        let last = d.double(forKey: "badgesFetchedAt")
+        let last = d.double(forKey: "badgesFetchedAt2")
         let stale = Date().timeIntervalSince1970 - last > 7 * 24 * 3600
         let todo = ids.filter { stale || known[$0.key + "#badge"] == nil }
         guard !todo.isEmpty else { return [:] }
@@ -44,7 +44,7 @@ enum LeagueBadges {
                 if let url { out[slug + "#badge"] = url.absoluteString }
             }
         }
-        if !out.isEmpty { d.set(Date().timeIntervalSince1970, forKey: "badgesFetchedAt") }
+        if !out.isEmpty { d.set(Date().timeIntervalSince1970, forKey: "badgesFetchedAt2") }
         return out
     }
 }

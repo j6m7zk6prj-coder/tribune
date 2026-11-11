@@ -63,6 +63,7 @@ targets:
       - path: Tribune/DiagView.swift
       - path: Tribune/SeasonView.swift
       - path: Tribune/Badges.swift
+      - path: Tribune/SportsDB.swift
     info:
       path: Support/Widget-Info.plist
       properties:

@@ -106,7 +106,8 @@ jobs:
           shot 09-suivis -tab following -seed
           shot 10-equipe -tab following -seed -open team
           shot 13-widgets -widgets -seed
-          shot 00-diag -diag
+          shot 08f-ligue3 -tab leagues -open league -league fra.3
+          shot 08g-ligue3-matchs -tab leagues -open league -league fra.3 -pane matches
           shot 11-reglages -tab matches -settings
           shot 12-matchs-clair -tab matches -day -2 -appearance light
           ls -la shots

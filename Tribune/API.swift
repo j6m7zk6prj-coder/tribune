@@ -100,7 +100,10 @@ enum ESPN {
     }
 
     /// Tous les matchs d'un jour (heure locale), pour les compétitions choisies.
-    static func matches(on day: Date, competitions: [Competition], onLogo: @escaping @MainActor (String, ESPNLeague) -> Void) async -> (matches: [Match], failed: Bool) {
+    static func matches(on day: Date, competitions all: [Competition], onLogo: @escaping @MainActor (String, ESPNLeague) -> Void) async -> (matches: [Match], failed: Bool) {
+        let competitions = all.filter { !SportsDB.covers($0.id) }
+        var extra: [Match] = []
+        for c in all where SportsDB.covers(c.id) { extra += await SportsDB.matches(on: day, slug: c.id) }
         let cal = Calendar.current
         let prev = cal.date(byAdding: .day, value: -1, to: day) ?? day
         // ESPN découpe les journées à l'heure de New York : on prend la veille aussi, puis on filtre.
@@ -121,6 +124,7 @@ enum ESPN {
         }
         var seen = Set<String>()
         out = out.filter { seen.insert($0.id).inserted }
+        out += extra
         return (out, failures == jobs.count && !jobs.isEmpty)
     }
 }

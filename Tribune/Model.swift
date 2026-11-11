@@ -117,6 +117,12 @@ struct Side: Hashable {
     var color: String?
     var altColor: String?
 
+    init(id: String, name: String, logo: URL?, score: String?, winner: Bool) {
+        self.id = id; self.name = name; self.short = name; self.abbr = String(name.prefix(3)).uppercased()
+        self.logo = logo; self.score = score; self.shootout = nil; self.winner = winner
+        self.color = nil; self.altColor = nil
+    }
+
     init(_ c: ESPNCompetitor?) {
         let t = c?.team
         id = t?.id ?? c?.id ?? "?"
@@ -143,6 +149,12 @@ struct Match: Identifiable, Hashable {
     var away: Side
     let venue: String?
     let round: String?
+
+    init(id: String, league: String, leagueName: String, date: Date, state: MatchState, statusName: String,
+         clock: String, home: Side, away: Side, venue: String?, round: String?) {
+        self.id = id; self.league = league; self.leagueName = leagueName; self.date = date; self.state = state
+        self.statusName = statusName; self.clock = clock; self.home = home; self.away = away; self.venue = venue; self.round = round
+    }
 
     init?(_ e: ESPNEvent, league: String, leagueName: String? = nil) {
         guard let comp = e.competitions.first else { return nil }

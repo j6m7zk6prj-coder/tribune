@@ -43,6 +43,7 @@ actor SeasonCache {
 extension ESPN {
     /// Tous les matchs d'une saison (ESPN accepte une année civile entière).
     static func season(_ c: Competition, year: Int) async -> [Match] {
+        if SportsDB.covers(c.id) { return await SportsDB.season(c.id, year: year) }
         var evs: [ESPNEvent] = []
         if c.isTournament {
             evs = await SeasonCache.shared.events(c.id, year: year) ?? []
