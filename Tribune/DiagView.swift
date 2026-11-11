@@ -27,19 +27,23 @@ struct DiagView: View {
     }
 
     func run() async {
-        // Logos TheSportsDB : vérifie que chaque identifiant correspond à la bonne compétition.
-        var res: [String] = []
-        for (slug, id) in LeagueBadges.ids.sorted(by: { $0.key < $1.key }) {
-            let r = await LeagueBadges.lookup(id)
-            res.append("\(slug)=\(id):\(r?.name ?? "∅")")
+        // Ligue 3 : ESPN et TheSportsDB
+        for slug in ["fra.3", "fra.national", "fra.nat", "fra.3.national"] {
+            let ok = (try? await ESPN.scoreboard(slug)) != nil
+            lines.append("ESPN \(slug): \(ok ? "OK" : "non")")
         }
-        lines.append(res.joined(separator: " · "))
-        await probe("FR leagues", "https://www.thesportsdb.com/api/v1/json/123/search_all_leagues.php?c=France&s=Soccer", keys: false)
-        if let sb = try? await ESPN.scoreboard("fra.3") {
-            lines.append("ESPN fra.3: \(sb.events.count) évts, ligue=\(sb.leagues.first?.name ?? "∅")")
-        } else { lines.append("ESPN fra.3: échec") }
-        let psg = TeamRef(id: "160", name: "PSG", league: "fra.1", logo: nil)
-        let ms = await ESPN.teamMatches(psg, upcomingOnly: true)
-        lines.append("PSG à venir: " + ms.prefix(5).map { "\($0.leagueName) \($0.home.abbr)-\($0.away.abbr) \($0.date.formatted(.dateTime.day().month()))" }.joined(separator: " | "))
+        if let u = URL(string: "https://www.thesportsdb.com/api/v1/json/123/search_all_leagues.php?c=France&s=Soccer"),
+           let r = try? await URLSession.shared.data(from: u),
+           let o = try? JSONSerialization.jsonObject(with: r.0) as? [String: Any],
+           let arr = (o["countries"] as? [[String: Any]]) ?? (o["leagues"] as? [[String: Any]]) {
+            lines.append("FR: " + arr.map { "\($0["idLeague"] ?? "")=\($0["strLeague"] ?? "")" }.joined(separator: " · "))
+            if let nat = arr.first(where: { (($0["strLeague"] as? String) ?? "").localizedCaseInsensitiveContains("National") || (($0["strLeague"] as? String) ?? "").localizedCaseInsensitiveContains("Ligue 3") }),
+               let id = nat["idLeague"] as? String {
+                await probe("table \(id)", "https://www.thesportsdb.com/api/v1/json/123/lookuptable.php?l=\(id)&s=2026-2027", keys: true)
+                await probe("next \(id)", "https://www.thesportsdb.com/api/v1/json/123/eventsnextleague.php?id=\(id)", keys: true)
+                await probe("past \(id)", "https://www.thesportsdb.com/api/v1/json/123/eventspastleague.php?id=\(id)", keys: true)
+                await probe("season \(id)", "https://www.thesportsdb.com/api/v1/json/123/eventsseason.php?id=\(id)&s=2026-2027", keys: true)
+            }
+        }
     }
 }
