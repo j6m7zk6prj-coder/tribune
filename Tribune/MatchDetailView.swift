@@ -18,6 +18,7 @@ struct MatchDetailView: View {
     @State private var match: Match
     @State private var summary: SummaryResponse?
     @State private var extras: MatchExtras?
+    @State private var replay: GoalReplay?
     @State private var loading = true
     @State private var tab: DetailTab = .fromLaunch
 
@@ -40,7 +41,8 @@ struct MatchDetailView: View {
         let colors = teamColors(match)
         ScrollView {
             VStack(spacing: 0) {
-                MatchHeader(match: match, events: events, colors: colors)
+                MatchHeader(match: match, events: events, colors: colors,
+                            onGoal: goalAnimationsEnabled(match.league) ? { e in playGoal(e) } : nil)
                     .padding(.horizontal, 16)
                     .padding(.top, 4)
                     .padding(.bottom, 22)
@@ -92,6 +94,11 @@ struct MatchDetailView: View {
                 withAnimation(.smooth(duration: 0.4)) { extras = x }
             }
             await load()
+            if Launch.args.contains("-goal"), !Launch.consumed.contains("goal"),
+               let g = events.first(where: { $0.kind.isGoal }), goalAnimationsEnabled(match.league) {
+                Launch.consumed.insert("goal")
+                playGoal(g)
+            }
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(match.state == .live ? 30 : 120))
                 if Task.isCancelled { break }
@@ -99,6 +106,20 @@ struct MatchDetailView: View {
             }
         }
         .onChange(of: tabs) { _, t in if !t.contains(tab) { tab = .facts } }
+        .fullScreenCover(item: $replay) { r in
+            GoalOverlay(replay: r) {
+                var tx = Transaction(); tx.disablesAnimations = true
+                withTransaction(tx) { replay = nil }
+            }
+            .presentationBackground(.clear)
+        }
+        .environment(\.goalFX, goalAnimationsEnabled(match.league))
+    }
+
+    func playGoal(_ e: KeyEvent) {
+        guard let r = GoalReplay.make(e, match: match, events: events) else { return }
+        var tx = Transaction(); tx.disablesAnimations = true
+        withTransaction(tx) { replay = r }
     }
 
     func load() async {
@@ -123,6 +144,7 @@ struct MatchHeader: View {
     let match: Match
     let events: [KeyEvent]
     let colors: (Color, Color)
+    var onGoal: ((KeyEvent) -> Void)? = nil
 
     var body: some View {
         VStack(spacing: 18) {
@@ -155,10 +177,10 @@ struct MatchHeader: View {
             let goals = events.filter { $0.kind.isGoal }
             if !goals.isEmpty {
                 HStack(alignment: .top, spacing: 0) {
-                    ScorerList(lines: Self.scorers(goals.filter { $0.teamID == match.home.id }), alignment: .trailing)
+                    ScorerButtons(goals: goals.filter { $0.teamID == match.home.id }, alignment: .trailing, onGoal: onGoal)
                     Image(systemName: "soccerball").font(.system(size: 12, weight: .semibold)).foregroundStyle(.secondary)
                         .frame(width: 40).padding(.top, 1)
-                    ScorerList(lines: Self.scorers(goals.filter { $0.teamID == match.away.id }), alignment: .leading)
+                    ScorerButtons(goals: goals.filter { $0.teamID == match.away.id }, alignment: .leading, onGoal: onGoal)
                 }
                 .transition(.opacity)
             }
@@ -179,6 +201,65 @@ struct MatchHeader: View {
             minutes[name, default: []].append(m)
         }
         return order.map { "\($0) \(minutes[$0]!.joined(separator: ", "))" }
+    }
+}
+
+/// Buteurs sous le score : toucher un nom (ou une minute) rejoue l'animation du but.
+struct ScorerButtons: View {
+    let goals: [KeyEvent]
+    let alignment: HorizontalAlignment
+    let onGoal: ((KeyEvent) -> Void)?
+
+    private struct Line: Identifiable { let id: String; let name: String; let goals: [KeyEvent] }
+
+    private var lines: [Line] {
+        var order: [String] = []
+        var map: [String: [KeyEvent]] = [:]
+        for g in goals {
+            let who = g.athletes.first.map { $0.lastName ?? $0.shortName ?? $0.displayName ?? "" } ?? ""
+            let name = who.isEmpty ? "But" : who
+            if map[name] == nil { order.append(name) }
+            map[name, default: []].append(g)
+        }
+        return order.map { Line(id: $0, name: $0, goals: map[$0]!) }
+    }
+
+    var body: some View {
+        VStack(alignment: alignment, spacing: 4) {
+            ForEach(lines) { l in
+                HStack(spacing: 5) {
+                    if alignment == .trailing { minutes(l) ; nameButton(l) } else { nameButton(l); minutes(l) }
+                }
+            }
+        }
+        .font(.footnote)
+        .foregroundStyle(.secondary)
+        .frame(maxWidth: .infinity, alignment: alignment == .trailing ? .trailing : .leading)
+    }
+
+    private func nameButton(_ l: Line) -> some View {
+        Button { if let g = l.goals.first { onGoal?(g) } } label: {
+            HStack(spacing: 3) {
+                if onGoal != nil && alignment == .leading { Image(systemName: "play.circle.fill").font(.caption2) }
+                Text(l.name).foregroundStyle(onGoal != nil ? Color.primary : Color.secondary)
+                if onGoal != nil && alignment == .trailing { Image(systemName: "play.circle.fill").font(.caption2) }
+            }
+        }
+        .buttonStyle(Pressable())
+        .disabled(onGoal == nil)
+    }
+
+    private func minutes(_ l: Line) -> some View {
+        HStack(spacing: 4) {
+            ForEach(l.goals) { g in
+                Button { onGoal?(g) } label: {
+                    Text((g.clockDisplay ?? "") + (g.kind == .penaltyGoal ? " (pén.)" : g.kind == .ownGoal ? " (csc)" : ""))
+                        .monospacedDigit()
+                }
+                .buttonStyle(Pressable())
+                .disabled(onGoal == nil)
+            }
+        }
     }
 }
 

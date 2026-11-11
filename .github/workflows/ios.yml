@@ -90,7 +90,9 @@ jobs:
             sleep 14
             xcrun simctl io "$UDID" screenshot "shots/$1.png"
           }
-          shot 00a-ligues-europe -tab leagues -scroll
+          shot 00g-but-goal -tab matches -day -3 -open plmatch -goal -goalhold 1.15
+          shot 00h-but-score -tab matches -day -3 -open plmatch -goal -goalhold 2.6
+          shot 00i-but-entree -tab matches -day -3 -open plmatch -goal -goalhold 0.6
           shot 00b-ldc -tab leagues -open league -league uefa.champions
           shot 00c-europa -tab leagues -open league -league uefa.europa -pane matches
           shot 00d-conference -tab leagues -open league -league uefa.europa.conf

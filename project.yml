@@ -67,6 +67,7 @@ targets:
       - path: Tribune/Themes.swift
       - path: Tribune/MatchExtras.swift
       - path: Tribune/Splash.swift
+      - path: Tribune/GoalAnimation.swift
     info:
       path: Support/Widget-Info.plist
       properties:

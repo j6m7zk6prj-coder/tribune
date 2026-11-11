@@ -51,11 +51,17 @@ struct PlayerPick: Identifiable {
     var id: String { player.id }
 }
 
+struct GoalFXKey: EnvironmentKey { static let defaultValue = false }
+
 struct PlayerTapKey: EnvironmentKey {
     static let defaultValue: (RosterPlayer) -> Void = { _ in }
 }
 
 extension EnvironmentValues {
+    var goalFX: Bool {
+        get { self[GoalFXKey.self] }
+        set { self[GoalFXKey.self] = newValue }
+    }
     var onPlayerTap: (RosterPlayer) -> Void {
         get { self[PlayerTapKey.self] }
         set { self[PlayerTapKey.self] = newValue }
@@ -225,6 +231,8 @@ private struct PlayerDot: View {
     let color: Color
     let marks: PlayerMarks
     @Environment(\.onPlayerTap) private var onTap
+    @Environment(\.goalFX) private var goalFX
+    @State private var burst = 0
 
     var body: some View {
         let id = player.athlete?.id ?? ""
@@ -250,7 +258,15 @@ private struct PlayerDot: View {
                 }
                 .overlay(alignment: .topLeading) {
                     if let g = marks.goals[id], g > 0 {
-                        Badge(icon: "soccerball", count: g).offset(x: -8, y: -4)
+                        Badge(icon: "soccerball", count: g)
+                            .background(BallBurst(color: color, trigger: burst))
+                            .phaseAnimator([false, true], trigger: burst) { v, on in v.scaleEffect(on ? 1.8 : 1) } animation: { on in on ? .spring(response: 0.18, dampingFraction: 0.5) : .spring(response: 0.35, dampingFraction: 0.6) }
+                            .highPriorityGesture(TapGesture().onEnded {
+                                guard goalFX else { onTap(player); return }
+                                burst += 1
+                                UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
+                            })
+                            .offset(x: -8, y: -4)
                     }
                 }
                 .overlay(alignment: .bottomLeading) {
